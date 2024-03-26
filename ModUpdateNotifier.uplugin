@@ -1,0 +1,37 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0.0",
+	"SemVersion": "1.0.0",
+	"FriendlyName": "Mod Update Notifier",
+	"Description": "The Mod Update Notifier (MUN) notifies you in-game when a mod you have installed needs an update.",
+	"Category": "Modding",
+	"CreatedBy": "SpaceGameDev",
+	"CreatedByURL": "https://spacegamedev.com",
+	"DocsURL": "https://docs.spacegamedev.com/mod-update-notifier",
+	"MarketplaceURL": "",
+	"SupportURL": "https://github.com/SpaceGameDev568/ModUpdateNotifier/issues/new/choose",
+	"CanContainContent": true,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "ModUpdateNotifier",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "Fetch",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "SML",
+			"Enabled": true,
+			"SemVersion": "^3.7.0"
+		}
+	]
+}
