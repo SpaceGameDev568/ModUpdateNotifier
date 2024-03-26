@@ -16,7 +16,7 @@ class MODUPDATENOTIFIER_API UMUNNotification : public UUserWidget
 
 public:
 
-	UMUNNotification();
+	//UMUNNotification();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FString UpdateList;

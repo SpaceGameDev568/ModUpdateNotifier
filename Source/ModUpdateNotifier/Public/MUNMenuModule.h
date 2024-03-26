@@ -21,8 +21,11 @@ public:
 
 	UMUNMenuModule();
 
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TSubclassOf<UUserWidget> MenuWidgetClass;
+
+	UPROPERTY(BlueprintReadOnly)
+	UUserWidget* MenuWidget;
 
 	UPROPERTY(EditAnywhere)
 	TArray<FString> ModFriendlyNames;
@@ -46,4 +49,7 @@ public:
 	void Init();
 
 	void OnResponseRecieved(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful);
+
+	UFUNCTION(BlueprintCallable, BlueprintImplementableEvent)
+	void FinishedProcessing();
 };

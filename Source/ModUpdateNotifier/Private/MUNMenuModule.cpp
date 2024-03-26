@@ -205,7 +205,7 @@ void UMUNMenuModule::OnResponseRecieved(FHttpRequestPtr Request, FHttpResponsePt
 			}
 			else if (IsModOutOfDate == true)
 			{
-				OutputList = OutputList + ",\n " + ModFriendlyNames[Index] + " " + ModVersions[Index].ToString() + " -> " + APIVersionStrings[Index];
+				OutputList = OutputList + ",\n" + ModFriendlyNames[Index] + " " + ModVersions[Index].ToString() + " -> " + APIVersionStrings[Index];
 			}
 		}
 
@@ -215,8 +215,10 @@ void UMUNMenuModule::OnResponseRecieved(FHttpRequestPtr Request, FHttpResponsePt
 	if (!OutputList.IsEmpty())
 	{
 		// Create the menu widget, set it's desired size, and add it to the viewport
-		UUserWidget* MenuWidget = CreateWidget(this->GetWorld()->GetGameInstance()->GetFirstLocalPlayerController(), MenuWidgetClass, FName("MUNMenuWidget"));
+		MenuWidget = CreateWidget(this->GetWorld()->GetGameInstance()->GetFirstLocalPlayerController(), MenuWidgetClass, FName("MUNMenuWidget"));
 		MenuWidget->SetDesiredSizeInViewport(FVector2D(400, 200));
 		MenuWidget->AddToViewport();
+
+		FinishedProcessing();
 	}
 }
