@@ -1,7 +1,6 @@
 // Copyright 2024 Jesse Hodgson.
 
 #include "MUNMenuModule.h"
-
 #include "GameFramework/Actor.h"
 #include "ModUpdateNotifier.h"
 #include "HTTP.h"
@@ -11,6 +10,18 @@
 
 UMUNMenuModule::UMUNMenuModule()
 {
+	// Initialize variables from config
+	{
+	#if WITH_EDITOR
+	UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Shipping env not detected, avoiding crash"));
+	#else
+	MUNConfig = FModUpdateNotifier_ConfigStruct::GetActiveConfig(GetWorld());
+	#endif
+	}
+
+	bDisableNotifications = MUNConfig.bDisableNotifications;
+
+	MenuWidget = nullptr; // Initialize the widget pointer
 }
 
 void UMUNMenuModule::Init()
@@ -56,45 +67,47 @@ void UMUNMenuModule::Init()
 	ModIDs.Add("CMA7t3H6L1dkWT"); // More Players
 	//ModIDs.Add("PleaseReplaceMeWithAnIDWhenIAmOnSMR"); // Mod Update Notifier
 
-	// Initialize the API version array with nonsense before trying to write to it.
-	APIVersionStrings.Add("Unfulfilled"); // Better Grass
-	APIVersionStrings.Add("Unfulfilled"); // SatisWHACKtory
-	APIVersionStrings.Add("Unfulfilled"); // Remove All Annoyances
-	APIVersionStrings.Add("Unfulfilled"); // Factory Props
-	APIVersionStrings.Add("Unfulfilled"); // Discord Rich Presence
-	APIVersionStrings.Add("Unfulfilled"); // 2m Walls
-	APIVersionStrings.Add("Unfulfilled"); // More Players
-	// APIVersionStrings.Add("Unfulfilled"); // Mod Update Notifier
-
-
-	// Create a ModInfo object to use for grabbing version data
-	FModInfo ModInfo;
-
-	// Get all loaded mod versions and put them in an array
-	for(auto& CurrentModName : ModNames)
+	if (!bDisableNotifications)
 	{
-		ModLoadingLibrary->GetLoadedModInfo(CurrentModName, ModInfo);
-		UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Added %s to mod version list."), *ModInfo.FriendlyName);
-		ModVersions.Add(ModInfo.Version);
-	}
+		// Create a ModInfo object to use for grabbing version data
+		FModInfo ModInfo;
 
+		// Get all loaded mod versions and put them into an array
+		for(auto& CurrentModName : ModNames)
+		{
+			if(ModLoadingLibrary->IsModLoaded(CurrentModName))
+			{
+				ModLoadingLibrary->GetLoadedModInfo(CurrentModName, ModInfo);
 
-	// Loop through the array of mod IDs and create an HTTP GET request to the v1 SMR API to retrieve the latest versions of each mod
-	for(auto& CurrentModID : ModIDs)
-	{
-		UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Retrieving version data from API for %s"), *CurrentModID);
+				InstalledMods.Add(CurrentModName);
+				ModVersions.Add(ModInfo.Version);
+				// Initialize the API version array with nonsense before trying to write to it.
+				APIVersionStrings.Add("Unfulfilled");
+				InstalledModIDs.Add(ModIDs[ModNames.IndexOfByKey(CurrentModName)]);
+				InstalledModFriendlyNames.Add(ModFriendlyNames[ModNames.IndexOfByKey(CurrentModName)]);
 
-		FHttpRequestRef Request =  FHttpModule::Get().CreateRequest();
-		TSharedRef<FJsonObject> RequestObj = MakeShared<FJsonObject>();
-		Request->OnProcessRequestComplete().BindUObject(this, &UMUNMenuModule::OnResponseRecieved);
-		Request->SetURL("https://api.ficsit.app/v1/mod/" + CurrentModID + "/latest-versions");
-		Request->SetVerb("GET");
-		Request->ProcessRequest();
+				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Added %s to mod version list."), *ModInfo.FriendlyName);
+			}
+		}
+
+		// Loop through the array of mod IDs and create an HTTP GET request to the v1 SMR API to retrieve the latest versions of each mod
+		for(auto& CurrentModID : InstalledModIDs)
+		{
+			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Retrieving version data from API for %s"), *CurrentModID);
+
+			// Create an HTTP GET request
+			FHttpRequestRef Request =  FHttpModule::Get().CreateRequest();
+			TSharedRef<FJsonObject> RequestObj = MakeShared<FJsonObject>();
+			Request->OnProcessRequestComplete().BindUObject(this, &UMUNMenuModule::OnResponseReceived);
+			Request->SetURL("https://api.ficsit.app/v1/mod/" + CurrentModID + "/latest-versions");
+			Request->SetVerb("GET");
+			Request->ProcessRequest();
+		}
 	}
 }
 
 // Parse the HTTP response to extract the data we want: "mod_id" and "version"
-void UMUNMenuModule::OnResponseRecieved(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
+void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
 {
 	UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Response Content (UMUNMenuModule): %s"), *Response->GetContentAsString());
 
@@ -103,122 +116,133 @@ void UMUNMenuModule::OnResponseRecieved(FHttpRequestPtr Request, FHttpResponsePt
 	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Response->GetContentAsString());
 	FJsonSerializer::Deserialize(Reader, ResponseObj);
 
-	if(ResponseObj->HasField("data"))
+	// Check if the response object is valid. This is useful if the API is down, or we don't have an internet connection. It can also prevent a crash.
+	if (ResponseObj)
 	{
-		UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Response has field \"data\"."));
-
-		// Create more objects to narrow down the field to a valid release, beta, or alpha version.
-		const TSharedPtr<FJsonObject> DataObj = ResponseObj->GetObjectField("data");
-		TSharedPtr<FJsonObject> ReleaseObj;
-
-		// Check if there is a release of the mod available. If there is not, fall back to a beta or alpha release.
-		if (DataObj->HasField("release"))
+		// Check if the response has a "data" field, if not, something is wrong and we should not continue
+		if(ResponseObj->HasField("data"))
 		{
-			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Response has field \"release\"."));
+			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Response has field \"data\"."));
 
-			ReleaseObj = DataObj->GetObjectField("release");
-		}
-		else if (DataObj->HasField("beta"))
-		{
-			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Response does not contain a release. Response has field \"beta\", instead."));
+			// Create more objects to narrow down the field to a valid release, beta, or alpha version.
+			const TSharedPtr<FJsonObject> DataObj = ResponseObj->GetObjectField("data");
+			TSharedPtr<FJsonObject> ReleaseObj;
 
-			ReleaseObj = DataObj->GetObjectField("beta");
-		}
-		else if (DataObj->HasField("alpha"))
-		{
-			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Response does not contain a release or beta. Response has field \"alpha\", instead."));
-
-			ReleaseObj = DataObj->GetObjectField("alpha");
-		}
-
-		// Put the response info into variables
-		const FString ResponseID = ReleaseObj->GetStringField("mod_id");
-		const FString ResponseVersion = ReleaseObj->GetStringField("version");
-
-		// DEBUG: Print out the mod ID and version from the API response
-		UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Response version data for mod %s: %s"), *ModNames[ModIDs.Find(ResponseID)], *ResponseVersion);
-
-		// DEBUG: Print out the known version for the corresponding mod ID
-		UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Known version: %s"), *ModVersions[ModIDs.Find(ResponseID)].ToString());
-
-		// Add the version response to the API version array at the corresponding index of the mod ID for future retrieval
-		APIVersionStrings[ModIDs.Find(ResponseID)] = ResponseVersion;
-
-		for(auto& CurrentAPIVersionFromArray : APIVersionStrings)
-		{
-			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("API version (from array): %s"), *CurrentAPIVersionFromArray);
-		}
-
-		// Create the menu widget
-		// const FName WidgetName = FName("MUNMenuWidget");
-		// CreateWidget(this->GetWorld()->GetGameInstance()->GetFirstLocalPlayerController(), MenuWidgetClass);
-	}
-	else
-	{
-		UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Invalid reponse: no field \"data\" found."));
-	}
-
-	// If the API version list is complete, compare it to the known version list
-	if(!APIVersionStrings.Contains("Unfulfilled"))
-	{
-		for (auto& CurrentAPIVersionString : APIVersionStrings)
-		{
-
-			bool IsModOutOfDate = false;
-			const int Index = APIVersionStrings.Find(CurrentAPIVersionString);
-			UE_LOG (LogModUpdateNotifier, Verbose, TEXT("Index: %d"), Index);
-
-			FString MajorVersionOut;
-			FString MinorVersionOut;
-			FString PatchVersionOut;
-			CurrentAPIVersionString.Split(".", &MajorVersionOut,&MinorVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
-			MinorVersionOut.Split(".", &MinorVersionOut, &PatchVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
-
-			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Merged version: %s.%s.%s"), *MajorVersionOut, *MinorVersionOut, *PatchVersionOut);
-
-			if(UKismetStringLibrary::Conv_StringToInt(MajorVersionOut) > ModVersions[Index].Major)
+			// Check if there is a release of the mod available. If there is not, fall back to a beta or alpha release.
+			if (DataObj->HasField("release"))
 			{
-				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("There is a newer version of this mod available since the major version is lower than the retrieved one. %s"), *ModNames[Index]);
+				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Response has field \"release\"."));
 
-				IsModOutOfDate = true;
+				ReleaseObj = DataObj->GetObjectField("release");
 			}
-			else if (UKismetStringLibrary::Conv_StringToInt(MinorVersionOut) > ModVersions[Index].Minor)
+			else if (DataObj->HasField("beta"))
 			{
-				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("There is a newer version of this mod available since the minor version is lower than the retrieved one. %s"), *ModNames[Index]);
+				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Response does not contain a release. Response has field \"beta\", instead."));
 
-				IsModOutOfDate = true;
+				ReleaseObj = DataObj->GetObjectField("beta");
 			}
-			else if (UKismetStringLibrary::Conv_StringToInt(PatchVersionOut) > ModVersions[Index].Patch)
+			else if (DataObj->HasField("alpha"))
 			{
-				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("There is a newer version of this mod available since the patch version is lower than the retrieved one. %s"), *ModNames[Index]);
+				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Response does not contain a release or beta. Response has field \"alpha\", instead."));
 
-				IsModOutOfDate = true;
-			}
-			else
-			{
-				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("The installed mod is up to date or newer than the available versions on SMR. %s"), *ModNames[Index]);
+				ReleaseObj = DataObj->GetObjectField("alpha");
 			}
 
-			if(OutputList.IsEmpty() && IsModOutOfDate == true)
+			// Put the response info into variables
+			const FString ResponseID = ReleaseObj->GetStringField("mod_id");
+			const FString ResponseVersion = ReleaseObj->GetStringField("version");
+
+			// Add the version response to the API version array at the corresponding index of the mod ID for future retrieval
+			APIVersionStrings[InstalledModIDs.Find(ResponseID)] = ResponseVersion;
+
+			// DEBUG: Print out the mod ID and version from the API response
+			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Response version data for mod %s: %s"), *InstalledMods[InstalledModIDs.Find(ResponseID)], *ResponseVersion);
+
+			// DEBUG: Print out the known version for the corresponding mod ID
+			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Known version: %s"), *ModVersions[ModIDs.Find(ResponseID)].ToString());
+
+			// DEBUG: Print out the API version array at this point in time
+			for(auto& CurrentAPIVersionFromArray : APIVersionStrings)
 			{
-				OutputList = ModFriendlyNames[Index] + " " + ModVersions[Index].ToString() + " -> " + APIVersionStrings[Index];
-			}
-			else if (IsModOutOfDate == true)
-			{
-				OutputList = OutputList + ",\n" + ModFriendlyNames[Index] + " " + ModVersions[Index].ToString() + " -> " + APIVersionStrings[Index];
+				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("API version (from array): %s"), *CurrentAPIVersionFromArray);
 			}
 		}
+		else
+		{
+			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Invalid reponse: no field \"data\" found."));
+		}
 
-		UE_LOG(LogModUpdateNotifier, Verbose, TEXT("%s"), *OutputList);
-	}
-	// If there are out of date mods in the list, create the menu widget
-	if (!OutputList.IsEmpty())
-	{
-		// Create the menu widget, set it's desired size, and add it to the viewport
-		MenuWidget = CreateWidget(this->GetWorld()->GetGameInstance()->GetFirstLocalPlayerController(), MenuWidgetClass, FName("MUNMenuWidget"));
-		MenuWidget->SetDesiredSizeInViewport(FVector2D(400, 200));
-		MenuWidget->AddToViewport();
+		// If the API version list is complete, compare it to the known version list
+		if(!APIVersionStrings.Contains("Unfulfilled"))
+		{
+			for (auto& CurrentAPIVersionString : APIVersionStrings)
+			{
+				// Initialize a variable that will be set to true if the mod is out of date
+				bool IsModOutOfDate = false;
 
-		FinishedProcessing();
+				// Create an index of the current version in the array that we are processing
+				const int Index = APIVersionStrings.Find(CurrentAPIVersionString);
+				UE_LOG (LogModUpdateNotifier, Verbose, TEXT("Index: %d"), Index);
+
+				// Create variables for the major, minor, and patch version numbers from the API response to be compared against the known version
+				FString MajorVersionOut;
+				FString MinorVersionOut;
+				FString PatchVersionOut;
+				CurrentAPIVersionString.Split(".", &MajorVersionOut,&MinorVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+				MinorVersionOut.Split(".", &MinorVersionOut, &PatchVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+
+				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Merged version: %s.%s.%s"), *MajorVersionOut, *MinorVersionOut, *PatchVersionOut);
+
+				// Check though the major, minor, and patch numbers from the API response sequentially to see if it is greater than the known version.
+				if(UKismetStringLibrary::Conv_StringToInt(MajorVersionOut) > ModVersions[Index].Major)
+				{
+					UE_LOG(LogModUpdateNotifier, Verbose, TEXT("There is a newer version of this mod available since the major version is lower than the retrieved one. %s"), *InstalledMods[Index]);
+
+					IsModOutOfDate = true;
+				}
+				else if (UKismetStringLibrary::Conv_StringToInt(MinorVersionOut) > ModVersions[Index].Minor)
+				{
+					UE_LOG(LogModUpdateNotifier, Verbose, TEXT("There is a newer version of this mod available since the minor version is lower than the retrieved one. %s"), *InstalledMods[Index]);
+
+					IsModOutOfDate = true;
+				}
+				else if (UKismetStringLibrary::Conv_StringToInt(PatchVersionOut) > ModVersions[Index].Patch)
+				{
+					UE_LOG(LogModUpdateNotifier, Verbose, TEXT("There is a newer version of this mod available since the patch version is lower than the retrieved one. %s"), *InstalledMods[Index]);
+
+					IsModOutOfDate = true;
+				}
+				else
+				{
+					UE_LOG(LogModUpdateNotifier, Verbose, TEXT("The installed mod is up to date or newer than the available versions on SMR. %s"), *InstalledMods[Index]);
+				}
+
+				// If a mod has updates available and the list is not empty, add it to the list. Else, add it to the list on a new line
+				if(OutputList.IsEmpty() && IsModOutOfDate == true)
+				{
+					OutputList = InstalledModFriendlyNames[Index] + " " + ModVersions[Index].ToString() + " -> " + APIVersionStrings[Index];
+				}
+				else if (IsModOutOfDate == true)
+				{
+					OutputList = OutputList + ",\n" + InstalledModFriendlyNames[Index] + " " + ModVersions[Index].ToString() + " -> " + APIVersionStrings[Index];
+				}
+			}
+
+			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("%s"), *OutputList);
+		}
+		// If there are out of date mods in the list, create the menu widget. Also check if we are running on a server and not display the menu widget.
+		if (!OutputList.IsEmpty() && this->GetWorld()->GetNetMode() != NM_DedicatedServer)
+		{
+			// Create the menu widget, set it's desired size, and add it to the viewport
+			MenuWidget = CreateWidget(this->GetWorld()->GetGameInstance()->GetFirstLocalPlayerController(), MenuWidgetClass, FName("MUNMenuWidget"));
+			MenuWidget->SetDesiredSizeInViewport(FVector2D(400, 200));
+			MenuWidget->AddToViewport();
+
+			FinishedProcessing();
+		}
+		else
+		{
+			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("All mods are up to date, not displaying a notification."));
+		}
 	}
 }
