@@ -165,7 +165,7 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Response version data for mod %s: %s"), *InstalledMods[InstalledModIDs.Find(ResponseID)], *ResponseVersion);
 
 			// DEBUG: Print out the known version for the corresponding mod ID
-			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Known version: %s"), *ModVersions[ModIDs.Find(ResponseID)].ToString());
+			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Known version: %s"), *ModVersions[InstalledModIDs.Find(ResponseID)].ToString());
 
 			// DEBUG: Print out the API version array at this point in time
 			for(auto& CurrentAPIVersionFromArray : APIVersionStrings)
