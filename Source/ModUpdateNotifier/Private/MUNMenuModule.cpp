@@ -3,7 +3,7 @@
 #include "MUNMenuModule.h"
 #include "GameFramework/Actor.h"
 #include "ModUpdateNotifier.h"
-#include "HTTP.h"
+#include "Http.h"
 #include "Blueprint/UserWidget.h"
 #include "Kismet/KismetStringLibrary.h"
 #include "ModLoading/ModLoadingLibrary.h"
@@ -46,6 +46,7 @@ void UMUNMenuModule::Init()
 	ModFriendlyNames.Add("Discord Rich Presence");
 	ModFriendlyNames.Add("2m Walls");
 	ModFriendlyNames.Add("More Players");
+	ModFriendlyNames.Add("Mod Update Notifier");
 
 	// Add my mods to the array of names, will be used later for grabbing local data in place of the SMR ID. MUST BE IN THE SAME ORDER AS THE SMR IDS
 	ModNames.Add("BetterGrass"); // Better Grass
@@ -55,7 +56,7 @@ void UMUNMenuModule::Init()
 	ModNames.Add("FG_DiscordRP"); // Discord Rich Presence
 	ModNames.Add("TwoMeterWalls"); // 2m Walls
 	ModNames.Add("MorePlayers"); // More Players
-	//ModNames.Add("ModUpdateNotifier");
+	ModNames.Add("ModUpdateNotifier");
 
 	// Add my mods to the ID list
 	ModIDs.Add("4S2xwMEFdMKymS"); // Better Grass
@@ -65,7 +66,7 @@ void UMUNMenuModule::Init()
 	ModIDs.Add("2t2nCEBqMdUt1n"); // Discord Rich Presence
 	ModIDs.Add("7NEYeWC3Mf5Rqa"); // 2m Walls
 	ModIDs.Add("CMA7t3H6L1dkWT"); // More Players
-	//ModIDs.Add("PleaseReplaceMeWithAnIDWhenIAmOnSMR"); // Mod Update Notifier
+	ModIDs.Add("8KzYMxowiUmKLn"); // Mod Update Notifier
 
 	if (!bDisableNotifications)
 	{
@@ -115,7 +116,7 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 	TSharedPtr<FJsonObject> ResponseObj;
 	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Response->GetContentAsString());
 	FJsonSerializer::Deserialize(Reader, ResponseObj);
-
+	
 	// Check if the response object is valid. This is useful if the API is down, or we don't have an internet connection. It can also prevent a crash.
 	if (ResponseObj)
 	{
@@ -140,12 +141,17 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Response does not contain a release. Response has field \"beta\", instead."));
 
 				ReleaseObj = DataObj->GetObjectField("beta");
+
 			}
 			else if (DataObj->HasField("alpha"))
 			{
 				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Response does not contain a release or beta. Response has field \"alpha\", instead."));
 
 				ReleaseObj = DataObj->GetObjectField("alpha");
+			}
+			else
+			{
+				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Response does not contain a release of any kind. Shutting down."));
 			}
 
 			// Put the response info into variables
@@ -227,7 +233,6 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 					OutputList = OutputList + ",\n" + InstalledModFriendlyNames[Index] + " " + ModVersions[Index].ToString() + " -> " + APIVersionStrings[Index];
 				}
 			}
-
 			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("%s"), *OutputList);
 		}
 		// If there are out of date mods in the list, create the menu widget. Also check if we are running on a server and not display the menu widget.

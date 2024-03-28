@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "Module/MenuWorldModule.h"
 #include "Util/SemVersion.h"
-#include "HTTP.h"
+#include "Http.h"
 #include "ModUpdateNotifier_ConfigStruct.h"
 #include "Blueprint/UserWidget.h"
 #include "MUNMenuModule.generated.h"

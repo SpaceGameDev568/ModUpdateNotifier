@@ -5,6 +5,3 @@
 
 # Ignore Crypto.json because the mod doesn't use pak file encryption
 /Modding/*
-
-# Ignore Fetch, will be removed
-/Source/Fetch/*
