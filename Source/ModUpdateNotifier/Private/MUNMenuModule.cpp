@@ -234,20 +234,21 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 				}
 			}
 			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("%s"), *OutputList);
-		}
-		// If there are out of date mods in the list, create the menu widget. Also check if we are running on a server and not display the menu widget.
-		if (!OutputList.IsEmpty() && this->GetWorld()->GetNetMode() != NM_DedicatedServer)
-		{
-			// Create the menu widget, set it's desired size, and add it to the viewport
-			MenuWidget = CreateWidget(this->GetWorld()->GetGameInstance()->GetFirstLocalPlayerController(), MenuWidgetClass, FName("MUNMenuWidget"));
-			MenuWidget->SetDesiredSizeInViewport(FVector2D(400, 200));
-			MenuWidget->AddToViewport();
 
-			FinishedProcessing();
-		}
-		else
-		{
-			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("All mods are up to date, not displaying a notification."));
+			// If there are out of date mods in the list, create the menu widget. Also check if we are running on a server and not display the menu widget.
+			if (!OutputList.IsEmpty() && this->GetWorld()->GetNetMode() != NM_DedicatedServer)
+			{
+				// Create the menu widget, set it's desired size, and add it to the viewport
+				MenuWidget = CreateWidget(this->GetWorld()->GetGameInstance()->GetFirstLocalPlayerController(), MenuWidgetClass, FName("MUNMenuWidget"));
+				MenuWidget->SetDesiredSizeInViewport(FVector2D(400, 200));
+				MenuWidget->AddToViewport();
+
+				FinishedProcessing();
+			}
+			else
+			{
+				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("All mods are up to date, not displaying a notification."));
+			}
 		}
 	}
 }
