@@ -1,7 +1,6 @@
 // Copyright 2024 Jesse Hodgson.
 
 #include "MUNMenuModule.h"
-#include "GameFramework/Actor.h"
 #include "ModUpdateNotifier.h"
 #include "Http.h"
 #include "Blueprint/UserWidget.h"
@@ -38,44 +37,35 @@ void UMUNMenuModule::Init()
 	UE_LOG(LogModUpdateNotifier, Verbose, TEXT("%s"), *MUNMetaInfo.FriendlyName.Append(", " + MUNMetaInfo.Version.ToString()));
 	UE_LOG(LogModUpdateNotifier, Display, TEXT("Build Date: %s %s"), ANSI_TO_TCHAR(__DATE__), ANSI_TO_TCHAR(__TIME__));
 
-	// Add friendly names of all mods to an array
-	ModFriendlyNames.Add("Better Grass");
-	ModFriendlyNames.Add("SatisWHACKtory");
-	ModFriendlyNames.Add("Remove All Annoyances");
-	ModFriendlyNames.Add("Factory Props");
-	ModFriendlyNames.Add("Discord Rich Presence");
-	ModFriendlyNames.Add("2m Walls");
-	ModFriendlyNames.Add("More Players");
-	ModFriendlyNames.Add("Mod Update Notifier");
+	struct FModUpdaterInfo
+	{
+		FString ModFriendlyName;
+		FString ModName;
+		FString ModID;
+	};
 
-	// Add my mods to the array of names, will be used later for grabbing local data in place of the SMR ID. MUST BE IN THE SAME ORDER AS THE SMR IDS
-	ModNames.Add("BetterGrass"); // Better Grass
-	ModNames.Add("ObstacleMod"); // SatisWHACKtory
-	ModNames.Add("RemoveAllAnnoyances"); // Remove All Annoyances
-	ModNames.Add("Factory_Prop_Mod"); // Factory Props
-	ModNames.Add("FG_DiscordRP"); // Discord Rich Presence
-	ModNames.Add("TwoMeterWalls"); // 2m Walls
-	ModNames.Add("MorePlayers"); // More Players
-	ModNames.Add("ModUpdateNotifier");
+	const TArray<FModUpdaterInfo> ModList = {
+		{ "Better Grass", "BetterGrass", "4S2xwMEFdMKymS" },// Better Grass
+		{ "SatisWHACKtory", "ObstacleMod", "8XYLMRNbnfzc2G" }, // SatisWHACKtory
+		{ "Remove All Annoyances", "RemoveAllAnnoyances", "FGnDVTV2ygmANY" }, // Remove All Annoyances
+		{ "Factory Props", "Factory_Prop_Mod", "8ivr6Mvuv4sCkX" }, // Factory Props
+		{ "Discord Rich Presence", "FG_DiscordRP", "2t2nCEBqMdUt1n" }, // Discord Rich Presence
+		{ "2m Walls", "TwoMeterWalls", "7NEYeWC3Mf5Rqa" }, // 2m Walls
+		{ "More Players", "MorePlayers", "CMA7t3H6L1dkWT" }, // More Players
+		{ "Mod Update Notifier", "ModUpdateNotifier", "8KzYMxowiUmKLn" } // Mod Update Notifier
+	};
 
-	// Add my mods to the ID list
-	ModIDs.Add("4S2xwMEFdMKymS"); // Better Grass
-	ModIDs.Add("8XYLMRNbnfzc2G"); // SatisWHACKtory
-	ModIDs.Add("FGnDVTV2ygmANY"); // Remove All Annoyances
-	ModIDs.Add("8ivr6Mvuv4sCkX"); // Factory Props
-	ModIDs.Add("2t2nCEBqMdUt1n"); // Discord Rich Presence
-	ModIDs.Add("7NEYeWC3Mf5Rqa"); // 2m Walls
-	ModIDs.Add("CMA7t3H6L1dkWT"); // More Players
-	ModIDs.Add("8KzYMxowiUmKLn"); // Mod Update Notifier
-
+	// Don't run this function if the user has disabled notifications
 	if (!bDisableNotifications)
 	{
 		// Create a ModInfo object to use for grabbing version data
 		FModInfo ModInfo;
 
 		// Get all loaded mod versions and put them into an array
-		for(auto& CurrentModName : ModNames)
+		for(int32 Index = 0; Index != ModList.Num(); ++Index)
 		{
+			const FString CurrentModName = ModList[Index].ModName;
+
 			if(ModLoadingLibrary->IsModLoaded(CurrentModName))
 			{
 				ModLoadingLibrary->GetLoadedModInfo(CurrentModName, ModInfo);
@@ -84,8 +74,8 @@ void UMUNMenuModule::Init()
 				ModVersions.Add(ModInfo.Version);
 				// Initialize the API version array with nonsense before trying to write to it.
 				APIVersionStrings.Add("Unfulfilled");
-				InstalledModIDs.Add(ModIDs[ModNames.IndexOfByKey(CurrentModName)]);
-				InstalledModFriendlyNames.Add(ModFriendlyNames[ModNames.IndexOfByKey(CurrentModName)]);
+				InstalledModIDs.Add(ModList[Index].ModID);
+				InstalledModFriendlyNames.Add(ModList[Index].ModFriendlyName);
 
 				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Added %s to mod version list."), *ModInfo.FriendlyName);
 			}
