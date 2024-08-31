@@ -23,44 +23,35 @@ public:
 	TSubclassOf<UUserWidget> MenuWidgetClass; // The notification widget class to show on the main menu
 
 	UPROPERTY(BlueprintReadOnly)
-	UUserWidget* MenuWidget; // A reference to the widget on the main menu, set after it is created at runtime
+	UUserWidget* MenuWidget; // The main menu widget
 
 	UPROPERTY(EditAnywhere)
-	TArray<FString> ModFriendlyNames; // Array of mod human-readable names
+	TArray<FString> InstalledModFriendlyNames; // Human-readable names of installed mods
 
 	UPROPERTY(EditAnywhere)
-	TArray<FString> InstalledModFriendlyNames; // Array of mod human-readable names, only populated at runtime with mods that are installed
+	TArray<FString> InstalledMods; // Mods that are installed
 
 	UPROPERTY(EditAnywhere)
-	TArray<FString> ModNames; // Array of mod references
+	TArray<FString> InstalledModIDs; // Satisfactory Mod Repository (https://ficsit.app) Mod IDs used in the REST API
 
 	UPROPERTY(EditAnywhere)
-	TArray<FString> InstalledMods; // Array of mod references, only populated at runtime with mods that are installed
+	TArray<FVersion> InstalledModVersions; // Known versions of installed mods
 
 	UPROPERTY(EditAnywhere)
-	TArray<FString> ModIDs; // Array of SMR mod IDs
-
-	UPROPERTY(EditAnywhere)
-	TArray<FString> InstalledModIDs; // Array of SMR mod IDs, only populated at runtime with mods that are installed
-
-	UPROPERTY(EditAnywhere)
-	TArray<FVersion> ModVersions; // Array of versions for installed mods
-
-	UPROPERTY(EditAnywhere)
-	TArray<FString> APIVersionStrings; // Array of mod versions retrieved from the SMR API
+	TArray<FString> APIVersions; // Remote versions of installed mods from the Satisfactory Mod Repository (https://ficsit.app)
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	FString OutputList; // String list of mods that need to be updated and the version difference information
+	FString ModUpdates; // List of available mod updates to be shown to the player in the notification
 
-	FModUpdateNotifier_ConfigStruct MUNConfig; // A pointer to the configuration structure
+	FModUpdateNotifier_ConfigStruct ModNotifierConfig; // Our global mod configuration structure
 
-	bool bDisableNotifications; // Boolean that is true if the user does not want to be notified of updates
+	bool bDisableNotifications; // Whether the player has chosen to opt out of receiving notifications
 
 	UFUNCTION(BlueprintCallable, Category = "Mod Update Notifier")
-	void Init(); // Function called manually by subclasses to initialize the module
+	void Init(); // Initialize the module in subclasses
 
-	void OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful); // Function called when the response is received from the API
+	void OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful); // Begin processing the response from the Satisfactory Mod Repository (https://ficsit.app) REST API
 
 	UFUNCTION(BlueprintCallable, BlueprintImplementableEvent)
-	void FinishedProcessing(); // Event triggered when we are finished processing data. Implemented in subclasses to send data about updates to the menu widget via a blueprint interface
+	void FinishedProcessingUpdates(); // Triggered when we are finished processing updates. Implemented in subclasses to send data about updates to the menu widget via a blueprint interface
 };
