@@ -1,8 +1,8 @@
 {
 	"FileVersion": 3,
-	"Version": 1,
-	"VersionName": "1.0.4",
-	"SemVersion": "1.0.4",
+	"Version": 2,
+	"VersionName": "2.0.0",
+	"SemVersion": "2.0.0",
 	"FriendlyName": "Mod Update Notifier",
 	"Description": "The Mod Update Notifier (MUN) notifies you in-game when a mod you have installed needs an update. Only works for SpaceGameDev Mods",
 	"Category": "Modding",
@@ -26,7 +26,8 @@
 		{
 			"Name": "SML",
 			"Enabled": true,
-			"SemVersion": "^3.7.0"
+			"SemVersion": "^3.8.0-dev"
 		}
-	]
+	],
+	"GameVersion": ">=365306"
 }
