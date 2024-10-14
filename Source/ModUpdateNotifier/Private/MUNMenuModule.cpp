@@ -12,7 +12,7 @@ UMUNMenuModule::UMUNMenuModule()
 	// Initialize variables from config
 	{
 	#if WITH_EDITOR
-	UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Shipping env not detected, avoiding crash"));
+	UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Cannot retrieve config data while in editor."));
 	#else
 	ModNotifierConfig = FModUpdateNotifier_ConfigStruct::GetActiveConfig(GetWorld());
 	#endif
@@ -80,8 +80,6 @@ void UMUNMenuModule::Init()
 		// Create an HTTP request to send to the ficsit.app REST API to get the latest version(s) for each mod
 		for(auto& CurrentModID : InstalledModIDs)
 		{
-			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Retrieving version data from API for %s"), *CurrentModID);
-
 			// Create an HTTP GET request
 			FHttpRequestRef Request =  FHttpModule::Get().CreateRequest();
 			TSharedRef<FJsonObject> RequestObj = MakeShared<FJsonObject>();
@@ -97,7 +95,6 @@ void UMUNMenuModule::Init()
 // Parse the HTTP response to extract the data we want: "mod_id" and "version"
 void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
 {
-	UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Response from ficsit.app: %s"), *Response->GetContentAsString());
 
 	// Create our JSON object
 	TSharedPtr<FJsonObject> ResponseObj;
@@ -191,7 +188,6 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 				ModUpdates = ModUpdates + ",\n" + InstalledModFriendlyNames[Index] + " " + InstalledModVersions[Index].ToString() + " -> " + APIVersions[Index];
 			}
 		}
-		UE_LOG(LogModUpdateNotifier, Verbose, TEXT("%s"), *ModUpdates);
 
 		// If there are out of date mods in the list, create the menu widget. Also check if we are running on a server and not display the menu widget.
 		if (!ModUpdates.IsEmpty() && this->GetWorld()->GetNetMode() != NM_DedicatedServer)
