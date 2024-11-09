@@ -93,115 +93,121 @@ void UMUNMenuModule::Init()
 }
 
 // Parse the HTTP response to extract the data we want: "mod_id" and "version"
-void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
+void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, const bool bWasSuccessful)
 {
+	if(bWasSuccessful){
 
-	// Create our JSON object
-	TSharedPtr<FJsonObject> ResponseObj;
-	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Response->GetContentAsString());
-	FJsonSerializer::Deserialize(Reader, ResponseObj);
+		// Create our JSON object
+		TSharedPtr<FJsonObject> ResponseObj;
+		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Response->GetContentAsString());
+		FJsonSerializer::Deserialize(Reader, ResponseObj);
 
-	if(ResponseObj && ResponseObj->HasField("data"))
-	{
-		// Create more objects to narrow down the field to a valid release, beta, or alpha version.
-		const TSharedPtr<FJsonObject> DataObj = ResponseObj->GetObjectField("data");
-		TSharedPtr<FJsonObject> ReleaseObj;
-
-		// Check if there is a release of the mod available. If there is not, fall back to a beta or alpha release.
-		if (DataObj->HasField("release"))
+		if(ResponseObj && ResponseObj->HasField("data"))
 		{
-			ReleaseObj = DataObj->GetObjectField("release");
-		}
-		else if (DataObj->HasField("beta"))
-		{
-			ReleaseObj = DataObj->GetObjectField("beta");
-		}
-		else if (DataObj->HasField("alpha"))
-		{
-			ReleaseObj = DataObj->GetObjectField("alpha");
-		}
-		else
-		{
-			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Response does not contain a release of any kind."));
-		}
+			// Create more objects to narrow down the field to a valid release, beta, or alpha version.
+			const TSharedPtr<FJsonObject> DataObj = ResponseObj->GetObjectField("data");
+			TSharedPtr<FJsonObject> ReleaseObj;
 
-		// Put the response info into variables
-		const FString ResponseID = ReleaseObj->GetStringField("mod_id");
-		const FString ResponseVersion = ReleaseObj->GetStringField("version");
-
-		// Add the version response to the API version array at the corresponding index of the mod ID for future retrieval
-		APIVersions[InstalledModIDs.Find(ResponseID)] = ResponseVersion;
-	}
-	else
-	{
-		UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Invalid response: no field \"data\" found."));
-	}
-
-	// If the API version list is complete, compare it to the known version list
-	if(!APIVersions.Contains("Unfulfilled"))
-	{
-		for (auto& CurrentAPIVersionString : APIVersions)
-		{
-			bool IsModOutOfDate = false;
-
-			// Create an index of the current version in the array that we are processing
-			const int Index = APIVersions.Find(CurrentAPIVersionString);
-
-			// Create variables for the major, minor, and patch version numbers from the API response to be compared against the known version
-			FString MajorVersionOut;
-			FString MinorVersionOut;
-			FString PatchVersionOut;
-			CurrentAPIVersionString.Split(".", &MajorVersionOut,&MinorVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
-			MinorVersionOut.Split(".", &MinorVersionOut, &PatchVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
-
-			// Check though the major, minor, and patch numbers from the API response sequentially to see if it is greater than the known version.
-			if(UKismetStringLibrary::Conv_StringToInt(MajorVersionOut) > InstalledModVersions[Index].Major)
+			// Check if there is a release of the mod available. If there is not, fall back to a beta or alpha release.
+			if (DataObj->HasField("release"))
 			{
-				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("There is a newer version of this mod available since the major version is lower than the retrieved one. %s"), *InstalledMods[Index]);
-
-				IsModOutOfDate = true;
+				ReleaseObj = DataObj->GetObjectField("release");
 			}
-			else if (UKismetStringLibrary::Conv_StringToInt(MinorVersionOut) > InstalledModVersions[Index].Minor)
+			else if (DataObj->HasField("beta"))
 			{
-				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("There is a newer version of this mod available since the minor version is lower than the retrieved one. %s"), *InstalledMods[Index]);
-
-				IsModOutOfDate = true;
+				ReleaseObj = DataObj->GetObjectField("beta");
 			}
-			else if (UKismetStringLibrary::Conv_StringToInt(PatchVersionOut) > InstalledModVersions[Index].Patch)
+			else if (DataObj->HasField("alpha"))
 			{
-				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("There is a newer version of this mod available since the patch version is lower than the retrieved one. %s"), *InstalledMods[Index]);
-
-				IsModOutOfDate = true;
+				ReleaseObj = DataObj->GetObjectField("alpha");
 			}
 			else
 			{
-				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("The installed mod is up to date or newer than the available versions on SMR. %s"), *InstalledMods[Index]);
+				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Response does not contain a release of any kind."));
 			}
 
-			// If a mod has updates available and the list is not empty, add it to the list on a new line
-			if(ModUpdates.IsEmpty() && IsModOutOfDate == true)
-			{
-				ModUpdates = InstalledModFriendlyNames[Index] + " " + InstalledModVersions[Index].ToString() + " -> " + APIVersions[Index];
-			}
-			else if (IsModOutOfDate == true)
-			{
-				ModUpdates = ModUpdates + ",\n" + InstalledModFriendlyNames[Index] + " " + InstalledModVersions[Index].ToString() + " -> " + APIVersions[Index];
-			}
-		}
+			// Put the response info into variables
+			const FString ResponseID = ReleaseObj->GetStringField("mod_id");
+			const FString ResponseVersion = ReleaseObj->GetStringField("version");
 
-		// If there are out of date mods in the list, create the menu widget. Also check if we are running on a server and not display the menu widget.
-		if (!ModUpdates.IsEmpty() && this->GetWorld()->GetNetMode() != NM_DedicatedServer)
-		{
-			// Create the menu widget, set it's desired size, and add it to the viewport
-			MenuWidget = CreateWidget(this->GetWorld()->GetGameInstance()->GetFirstLocalPlayerController(), MenuWidgetClass, FName("MUNMenuWidget"));
-			MenuWidget->SetDesiredSizeInViewport(FVector2D(400, 200));
-			MenuWidget->AddToViewport();
-
-			FinishedProcessingUpdates();
+			// Add the version response to the API version array at the corresponding index of the mod ID for future retrieval
+			APIVersions[InstalledModIDs.Find(ResponseID)] = ResponseVersion;
 		}
 		else
 		{
-			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("All mods are up to date, not displaying a notification."));
+			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Invalid response: no field \"data\" found."));
+		}
+
+		// If the API version list is complete, compare it to the known version list
+		if(!APIVersions.Contains("Unfulfilled"))
+		{
+			for (auto& CurrentAPIVersionString : APIVersions)
+			{
+				bool IsModOutOfDate = false;
+
+				// Create an index of the current version in the array that we are processing
+				const int Index = APIVersions.Find(CurrentAPIVersionString);
+
+				// Create variables for the major, minor, and patch version numbers from the API response to be compared against the known version
+				FString MajorVersionOut;
+				FString MinorVersionOut;
+				FString PatchVersionOut;
+				CurrentAPIVersionString.Split(".", &MajorVersionOut,&MinorVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+				MinorVersionOut.Split(".", &MinorVersionOut, &PatchVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+
+				// Check though the major, minor, and patch numbers from the API response sequentially to see if it is greater than the known version.
+				if(UKismetStringLibrary::Conv_StringToInt(MajorVersionOut) > InstalledModVersions[Index].Major )
+				{
+					UE_LOG(LogModUpdateNotifier, Verbose, TEXT("There is a newer version of this mod available since the major version is lower than the retrieved one. %s"), *InstalledMods[Index]);
+
+					IsModOutOfDate = true;
+				}
+				else if (UKismetStringLibrary::Conv_StringToInt(MinorVersionOut) > InstalledModVersions[Index].Minor)
+				{
+					UE_LOG(LogModUpdateNotifier, Verbose, TEXT("There is a newer version of this mod available since the minor version is lower than the retrieved one. %s"), *InstalledMods[Index]);
+
+					IsModOutOfDate = true;
+				}
+				else if (UKismetStringLibrary::Conv_StringToInt(PatchVersionOut) > InstalledModVersions[Index].Patch)
+				{
+					UE_LOG(LogModUpdateNotifier, Verbose, TEXT("There is a newer version of this mod available since the patch version is lower than the retrieved one. %s"), *InstalledMods[Index]);
+
+					IsModOutOfDate = true;
+				}
+				else
+				{
+					UE_LOG(LogModUpdateNotifier, Verbose, TEXT("The installed mod is up to date or newer than the available versions on SMR. %s"), *InstalledMods[Index]);
+				}
+
+				// If a mod has updates available and the list is not empty, add it to the list on a new line
+				if(ModUpdates.IsEmpty() && IsModOutOfDate == true)
+				{
+					ModUpdates = InstalledModFriendlyNames[Index] + " " + InstalledModVersions[Index].ToString() + " -> " + APIVersions[Index];
+				}
+				else if (IsModOutOfDate == true)
+				{
+					ModUpdates = ModUpdates + ",\n" + InstalledModFriendlyNames[Index] + " " + InstalledModVersions[Index].ToString() + " -> " + APIVersions[Index];
+				}
+			}
+
+			// If there are out of date mods in the list, create the menu widget. Also check if we are running on a server and not display the menu widget.
+			if (!ModUpdates.IsEmpty() && this->GetWorld()->GetNetMode() != NM_DedicatedServer)
+			{
+				// Create the menu widget, set it's desired size, and add it to the viewport
+				MenuWidget = CreateWidget(this->GetWorld()->GetGameInstance()->GetFirstLocalPlayerController(), MenuWidgetClass, FName("MUNMenuWidget"));
+				MenuWidget->SetDesiredSizeInViewport(FVector2D(400, 200));
+				MenuWidget->AddToViewport();
+
+				FinishedProcessingUpdates();
+			}
+			else
+			{
+				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("All mods are up to date, not displaying a notification."));
+			}
 		}
 	}
+	else {
+		UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Unable to connect to API, user may be offline."));
+	}
+
 }
