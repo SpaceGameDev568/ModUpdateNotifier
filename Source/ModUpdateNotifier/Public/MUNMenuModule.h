@@ -10,6 +10,23 @@
 #include "Blueprint/UserWidget.h"
 #include "MUNMenuModule.generated.h"
 
+USTRUCT(BlueprintType)
+struct FModUpdateNotifierInfo
+{
+	GENERATED_BODY()
+
+public:
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString ModFriendlyName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString ModName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString ModID;
+};
+
 UCLASS()
 class MODUPDATENOTIFIER_API UMUNMenuModule : public UMenuWorldModule
 {
@@ -48,7 +65,7 @@ public:
 	bool bDisableNotifications; // Whether the player has chosen to opt out of receiving notifications
 
 	UFUNCTION(BlueprintCallable, Category = "Mod Update Notifier")
-	void Init(); // Initialize the module in subclasses
+	void Init(TArray<FModUpdateNotifierInfo> ModInfoList); // Initialize the module in subclasses
 
 	void OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful); // Begin processing the response from the Satisfactory Mod Repository (https://ficsit.app) REST API
 
