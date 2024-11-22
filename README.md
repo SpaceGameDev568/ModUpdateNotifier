@@ -1,5 +1,6 @@
-# SpaceGameDev Mod Update Notifier
-<img src="https://github.com/SpaceGameDev568/ModUpdateNotifier/assets/95051062/619ba8cb-47be-4bae-8de7-580a5d0a1a8c" width="50%">
+# Mod Update Notifier
+<img src="https://github.com/user-attachments/assets/42dd1348-2f03-4ece-a5f2-84c8e1d5b659" width="50%">
+
 
 This is a mod for Satisfactory that notifies users in-game when one or more installed mods have updates available. The source code here is free to use for your own projects, though I'd prefer if you didn't just redistribute the mod.
 
