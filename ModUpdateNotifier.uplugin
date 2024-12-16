@@ -29,6 +29,6 @@
 			"SemVersion": "^3.8.0"
 		}
 	],
-	"GameVersion": ">=365306",
+	"GameVersion": ">=383729",
 	"RequiredOnRemote": false
 }
