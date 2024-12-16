@@ -74,15 +74,13 @@ void UMUNMenuModule::Init(TArray<FModUpdateNotifierInfo> ModInfoList)
 		}
 
 		// Create an HTTP request to send to the ficsit.app REST API to get the latest version(s) for each mod
-		for(auto& CurrentMod : InstalledMods)
+		for(auto& CurrentModID : InstalledModIDs)
 		{
 			// Create an HTTP GET request
 			FHttpRequestRef Request =  FHttpModule::Get().CreateRequest();
 			TSharedRef<FJsonObject> RequestObj = MakeShared<FJsonObject>();
 			Request->OnProcessRequestComplete().BindUObject(this, &UMUNMenuModule::OnResponseReceived);
-			Request->SetURL("https://api.ficsit.app/v2/query");
-			FString Content = "{\"query\": \"query { getModByReference(modReference:" + CurrentMod + ") { id } }\"}";
-			Request->SetContentAsString(Content);
+			Request->SetURL("https://api.ficsit.app/v1/mod/" + CurrentModID + "/latest-versions");
 			Request->SetVerb("GET");
 
 			Request->ProcessRequest();
@@ -99,8 +97,6 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 		TSharedPtr<FJsonObject> ResponseObj;
 		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Response->GetContentAsString());
 		FJsonSerializer::Deserialize(Reader, ResponseObj);
-
-		UE_LOG(LogModUpdateNotifier, Verbose, TEXT("%s"), *Response->GetContentAsString());
 
 		if(ResponseObj && ResponseObj->HasField("data"))
 		{
