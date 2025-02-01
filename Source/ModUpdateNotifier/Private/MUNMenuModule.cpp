@@ -1,9 +1,11 @@
 // Copyright 2024 Jesse Hodgson.
 
 #include "MUNMenuModule.h"
+
+#include "AkAcousticTextureSetComponent.h"
+#include "FGBlueprintFunctionLibrary.h"
 #include "ModUpdateNotifier.h"
 #include "Http.h"
-#include "Blueprint/UserWidget.h"
 #include "Kismet/KismetStringLibrary.h"
 #include "ModLoading/ModLoadingLibrary.h"
 
@@ -19,7 +21,6 @@ UMUNMenuModule::UMUNMenuModule()
 	}
 
 	bDisableNotifications = ModNotifierConfig.bDisableNotifications;
-	MenuWidget = nullptr;
 }
 
 void UMUNMenuModule::Init(TArray<FModUpdateNotifierInfo> ModInfoList)
@@ -37,7 +38,7 @@ void UMUNMenuModule::Init(TArray<FModUpdateNotifierInfo> ModInfoList)
 
 	TArray<FModUpdateNotifierInfo> ModList = ModInfoList;
 
-	// List out the info for each mod manually
+	// List out the info for each mod manually (NOT USED CURRENTLY)
 
 	// const TArray<FModNotifierInfo> ModList = {
 	// 	{ "Better Grass", "BetterGrass", "4S2xwMEFdMKymS" },// Better Grass
@@ -152,19 +153,19 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 				MinorVersionOut.Split(".", &MinorVersionOut, &PatchVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
 
 				// Check though the major, minor, and patch numbers from the API response sequentially to see if it is greater than the known version.
-				if(UKismetStringLibrary::Conv_StringToInt(MajorVersionOut) > InstalledModVersions[Index].Major )
+				if(UKismetStringLibrary::Conv_StringToInt(MajorVersionOut) > InstalledModVersions[Index].Major)
 				{
 					UE_LOG(LogModUpdateNotifier, Verbose, TEXT("There is a newer version of this mod available since the major version is lower than the retrieved one. %s"), *InstalledMods[Index]);
 
 					IsModOutOfDate = true;
-				}
-				else if (UKismetStringLibrary::Conv_StringToInt(MinorVersionOut) > InstalledModVersions[Index].Minor)
+				} // If the remote Minor version is greater AND the remote Major version is greater than or equal to the local version
+				else if (UKismetStringLibrary::Conv_StringToInt(MinorVersionOut) > InstalledModVersions[Index].Minor && UKismetStringLibrary::Conv_StringToInt(MajorVersionOut) >= InstalledModVersions[Index].Major)
 				{
 					UE_LOG(LogModUpdateNotifier, Verbose, TEXT("There is a newer version of this mod available since the minor version is lower than the retrieved one. %s"), *InstalledMods[Index]);
 
 					IsModOutOfDate = true;
-				}
-				else if (UKismetStringLibrary::Conv_StringToInt(PatchVersionOut) > InstalledModVersions[Index].Patch)
+				} // If the remote Patch version is greater AND the remote Minor version is greater than or equal to the local version
+				else if (UKismetStringLibrary::Conv_StringToInt(PatchVersionOut) > InstalledModVersions[Index].Patch && UKismetStringLibrary::Conv_StringToInt(MinorVersionOut) >= InstalledModVersions[Index].Minor)
 				{
 					UE_LOG(LogModUpdateNotifier, Verbose, TEXT("There is a newer version of this mod available since the patch version is lower than the retrieved one. %s"), *InstalledMods[Index]);
 
@@ -189,10 +190,10 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 			// If there are out of date mods in the list, create the menu widget. Also check if we are running on a server and not display the menu widget.
 			if (!ModUpdates.IsEmpty() && this->GetWorld()->GetNetMode() != NM_DedicatedServer)
 			{
-				// Create the menu widget, set it's desired size, and add it to the viewport
-				MenuWidget = CreateWidget(this->GetWorld()->GetGameInstance()->GetFirstLocalPlayerController(), MenuWidgetClass, FName("MUNMenuWidget"));
-				MenuWidget->SetDesiredSizeInViewport(FVector2D(400, 200));
-				MenuWidget->AddToViewport();
+				// Add the popup in the Main Menu
+				const FPopupClosed CloseDelegate;
+
+				UFGBlueprintFunctionLibrary::AddPopupWithCloseDelegate(this->GetWorld()->GetGameInstance()->GetFirstLocalPlayerController(), FText::FromString("Mod Update Notifier"), FText::FromString("Body Text"), CloseDelegate, PID_NONE, MenuWidgetClass, this, false);
 
 				FinishedProcessingUpdates();
 			}
@@ -206,4 +207,9 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 		UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Unable to connect to API, user may be offline."));
 	}
 
+}
+
+void UMUNMenuModule::GetAvailableUpdates(FString& AvailableUpdates)
+{
+	AvailableUpdates = ModUpdates;
 }

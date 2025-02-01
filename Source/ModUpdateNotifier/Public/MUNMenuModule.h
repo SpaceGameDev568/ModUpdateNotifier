@@ -39,9 +39,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TSubclassOf<UUserWidget> MenuWidgetClass; // The notification widget class to show on the main menu
 
-	UPROPERTY(BlueprintReadOnly)
-	UUserWidget* MenuWidget; // The main menu widget
-
 	UPROPERTY(EditAnywhere)
 	TArray<FString> InstalledModFriendlyNames; // Human-readable names of installed mods
 
@@ -67,7 +64,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Mod Update Notifier")
 	void Init(TArray<FModUpdateNotifierInfo> ModInfoList); // Initialize the module in subclasses
 
-	void OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful); // Begin processing the response from the Satisfactory Mod Repository (https://ficsit.app) REST API
+	UFUNCTION(BlueprintCallable, Category = "Mod Update Notifier")
+	void GetAvailableUpdates(FString& AvailableUpdates); // Initialize the module in subclasses
+
+	void OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful); // Triggered when we receive a response from the Satisfactory Mod Repository (https://api.ficsit.app/v1/) REST API
 
 	UFUNCTION(BlueprintCallable, BlueprintImplementableEvent)
 	void FinishedProcessingUpdates(); // Triggered when we are finished processing updates. Implemented in subclasses to send data about updates to the menu widget via a blueprint interface
