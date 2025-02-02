@@ -8,6 +8,7 @@
 #include "Http.h"
 #include "Kismet/KismetStringLibrary.h"
 #include "ModLoading/ModLoadingLibrary.h"
+#include "WorldModuleManager.h"
 
 UMUNMenuModule::UMUNMenuModule()
 {
@@ -31,12 +32,63 @@ void UMUNMenuModule::Init(TArray<FModUpdateNotifierInfo> ModInfoList)
 	// Get an instance of the ModLoadingLibrary to use for retrieving mod info
 	UModLoadingLibrary *ModLoadingLibrary = GetWorld()->GetGameInstance()->GetSubsystem<UModLoadingLibrary>();
 
+	// Log some build info and debug information about MUN
 	FModInfo ModNotifierMetaInfo;
 	ModLoadingLibrary->GetLoadedModInfo("ModUpdateNotifier", ModNotifierMetaInfo);
 	UE_LOG(LogModUpdateNotifier, Verbose, TEXT("%s"), *ModNotifierMetaInfo.FriendlyName.Append(", " + ModNotifierMetaInfo.Version.ToString()));
 	UE_LOG(LogModUpdateNotifier, Display, TEXT("Build Date: %s %s"), ANSI_TO_TCHAR(__DATE__), ANSI_TO_TCHAR(__TIME__));
 
+	// Create the array of mod info for checking later
 	TArray<FModUpdateNotifierInfo> ModList = ModInfoList;
+
+	// Get a reference to the World Module Manager, used later for check for the SMR_ID property on mod World Modules
+	UWorldModuleManager *WorldModuleManager = GetWorld()->GetSubsystem<UWorldModuleManager>();
+	// Get a list of all loaded mods, we loop through this to check if each mod has the SMR_ID property
+	TArray<FModInfo> LoadedMods = ModLoadingLibrary->GetLoadedMods();
+
+	TArray<FString> LegacyMods;
+
+	for (auto& CurrentMod : ModList)
+	{
+		LegacyMods.Add(CurrentMod.ModName);
+
+		UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Legacy MUN Implementation found, please update your mod! %s"), *CurrentMod.ModFriendlyName);
+	}
+
+	// Check all loaded mods
+	for (auto& CurrentLoadedMod : LoadedMods)
+	{
+		// If we find a module for the currently loaded mod, continue
+		if (WorldModuleManager->FindModule(FName(*CurrentLoadedMod.Name)))
+		{
+			// Create a variable to hold the mod module
+			UWorldModule* Mod = WorldModuleManager->FindModule(FName(*CurrentLoadedMod.Name));
+
+			// Based on this post: https://forums.unrealengine.com/t/how-to-get-a-string-property-by-name/266008
+			//
+			// Check if the module has an SMR_ID property
+			if (Mod->GetClass()->FindPropertyByName("ModUpdateNotifier_SMR_ID")->IsValidLowLevel())
+			{
+				// Get a reference to the SMR_ID property and assign its value to a variable
+				FProperty* Property = Mod->GetClass()->FindPropertyByName("ModUpdateNotifier_SMR_ID");
+
+				FStrProperty* StringProperty = CastField<FStrProperty>(Property);
+
+				void* PropertyAddress = Property->ContainerPtrToValuePtr<void>(Mod);
+
+				FString OutValue = StringProperty->GetPropertyValue(PropertyAddress);
+
+				// Assign the info from the mod along with its SMR ID to a struct, then add it to the list of mods to check for updates
+				FModUpdateNotifierInfo MUNInfo = {
+					CurrentLoadedMod.FriendlyName,
+					CurrentLoadedMod.Name,
+					OutValue
+				};
+
+				ModList.Add(MUNInfo);
+			}
+		}
+	}
 
 	// List out the info for each mod manually (NOT USED CURRENTLY)
 
@@ -194,8 +246,6 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 				const FPopupClosed CloseDelegate;
 
 				UFGBlueprintFunctionLibrary::AddPopupWithCloseDelegate(this->GetWorld()->GetGameInstance()->GetFirstLocalPlayerController(), FText::FromString("Mod Update Notifier"), FText::FromString("Body Text"), CloseDelegate, PID_NONE, MenuWidgetClass, this, false);
-
-				FinishedProcessingUpdates();
 			}
 			else
 			{
@@ -212,4 +262,9 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 void UMUNMenuModule::GetAvailableUpdates(FString& AvailableUpdates)
 {
 	AvailableUpdates = ModUpdates;
+}
+
+void UMUNMenuModule::LaunchSMM()
+{
+	FPlatformProcess::LaunchURL(*FString("smmanager://"), nullptr, nullptr);
 }
