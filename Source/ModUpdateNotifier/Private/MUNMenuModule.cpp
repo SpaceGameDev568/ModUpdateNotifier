@@ -24,7 +24,7 @@ UMUNMenuModule::UMUNMenuModule()
 	bDisableNotifications = ModNotifierConfig.bDisableNotifications;
 }
 
-void UMUNMenuModule::Init(TArray<FModUpdateNotifierInfo> ModInfoList)
+void UMUNMenuModule::Init()
 {
 	// Log metadata from ModUpdateNotifier for debug purposes
 	UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Loaded ModUpdateNotifier Menu Module."));
@@ -38,74 +38,68 @@ void UMUNMenuModule::Init(TArray<FModUpdateNotifierInfo> ModInfoList)
 	UE_LOG(LogModUpdateNotifier, Verbose, TEXT("%s"), *ModNotifierMetaInfo.FriendlyName.Append(", " + ModNotifierMetaInfo.Version.ToString()));
 	UE_LOG(LogModUpdateNotifier, Display, TEXT("Build Date: %s %s"), ANSI_TO_TCHAR(__DATE__), ANSI_TO_TCHAR(__TIME__));
 
-	// Create the array of mod info for checking later
-	TArray<FModUpdateNotifierInfo> ModList = ModInfoList;
-
-	// Get a reference to the World Module Manager, used later for check for the SMR_ID property on mod World Modules
-	UWorldModuleManager *WorldModuleManager = GetWorld()->GetSubsystem<UWorldModuleManager>();
-	// Get a list of all loaded mods, we loop through this to check if each mod has the SMR_ID property
-	TArray<FModInfo> LoadedMods = ModLoadingLibrary->GetLoadedMods();
-
-	TArray<FString> LegacyMods;
-
-	for (auto& CurrentMod : ModList)
+	// Should we check for updates?
+	if (!bDisableNotifications && this->GetWorld()->GetNetMode() != NM_DedicatedServer) // Temporarily disable checking on dedicated servers due to elevated number of SIGSEGV errors
 	{
-		LegacyMods.Add(CurrentMod.ModName);
+		// Get a reference to the World Module Manager, used later for check for the SMR_ID property on mod World Modules
+		UWorldModuleManager *WorldModuleManager = GetWorld()->GetSubsystem<UWorldModuleManager>();
+		// Get a list of all loaded mods, we loop through this to check if each mod has the SMR_ID property
+		TArray<FModInfo> LoadedMods = ModLoadingLibrary->GetLoadedMods();
 
-		UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Legacy MUN Implementation found, please update your mod! %s"), *CurrentMod.ModFriendlyName);
-	}
+		// Create the array of mod info for checking later
+		TArray<FModUpdateNotifierInfo> ModList;
 
-	// Check all loaded mods
-	for (auto& CurrentLoadedMod : LoadedMods)
-	{
-		// If we find a module for the currently loaded mod, continue
-		if (WorldModuleManager->FindModule(FName(*CurrentLoadedMod.Name)))
+		// Check all loaded mods
+		for (auto& CurrentLoadedMod : LoadedMods)
 		{
-			// Create a variable to hold the mod module
-			UWorldModule* Mod = WorldModuleManager->FindModule(FName(*CurrentLoadedMod.Name));
-
-			// Based on this post: https://forums.unrealengine.com/t/how-to-get-a-string-property-by-name/266008
-			//
-			// Check if the module has an SMR_ID property
-			if (Mod->GetClass()->FindPropertyByName("ModUpdateNotifier_SMR_ID")->IsValidLowLevel())
+			// If we find a module for the currently loaded mod, continue
+			if (WorldModuleManager->FindModule(FName(*CurrentLoadedMod.Name)))
 			{
-				// Get a reference to the SMR_ID property and assign its value to a variable
-				FProperty* Property = Mod->GetClass()->FindPropertyByName("ModUpdateNotifier_SMR_ID");
+				// Create a variable to hold the mod module
+				UWorldModule* Mod = WorldModuleManager->FindModule(FName(*CurrentLoadedMod.Name));
 
-				FStrProperty* StringProperty = CastField<FStrProperty>(Property);
+				// Based on this post: https://forums.unrealengine.com/t/how-to-get-a-string-property-by-name/266008
+				//
+				// Check if the module has an SMR_ID property
+				if (Mod->GetClass()->FindPropertyByName("ModUpdateNotifier_SMR_ID")->IsValidLowLevel())
+				{
+					// Get a reference to the SMR_ID property and assign its value to a variable
+					FProperty* Property = Mod->GetClass()->FindPropertyByName("ModUpdateNotifier_SMR_ID");
 
-				void* PropertyAddress = Property->ContainerPtrToValuePtr<void>(Mod);
+					FStrProperty* StringProperty = CastField<FStrProperty>(Property);
 
-				FString OutValue = StringProperty->GetPropertyValue(PropertyAddress);
+					void* PropertyAddress = Property->ContainerPtrToValuePtr<void>(Mod);
 
-				// Assign the info from the mod along with its SMR ID to a struct, then add it to the list of mods to check for updates
-				FModUpdateNotifierInfo MUNInfo = {
-					CurrentLoadedMod.FriendlyName,
-					CurrentLoadedMod.Name,
-					OutValue
-				};
+					FString OutValue = StringProperty->GetPropertyValue(PropertyAddress);
 
-				ModList.Add(MUNInfo);
+					// Assign the info from the mod along with its SMR ID to a struct, then add it to the list of mods to check for updates
+					FModUpdateNotifierInfo MUNInfo = {
+						CurrentLoadedMod.FriendlyName,
+						CurrentLoadedMod.Name,
+						OutValue
+					};
+
+					ModList.Add(MUNInfo);
+				}
+				// DEBUG: else {
+				// 	UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Could not find SMR_ID field for mod: %s"), *CurrentLoadedMod.FriendlyName);
+				// }
 			}
 		}
-	}
 
-	// List out the info for each mod manually (NOT USED CURRENTLY)
+		// List out the info for each mod manually (NOT USED CURRENTLY)
 
-	// const TArray<FModNotifierInfo> ModList = {
-	// 	{ "Better Grass", "BetterGrass", "4S2xwMEFdMKymS" },// Better Grass
-	// 	{ "SatisWHACKtory", "ObstacleMod", "8XYLMRNbnfzc2G" }, // SatisWHACKtory
-	// 	{ "Remove All Annoyances", "RemoveAllAnnoyances", "FGnDVTV2ygmANY" }, // Remove All Annoyances
-	// 	{ "Factory Props", "Factory_Prop_Mod", "8ivr6Mvuv4sCkX" }, // Factory Props
-	// 	{ "Discord Rich Presence", "FG_DiscordRP", "2t2nCEBqMdUt1n" }, // Discord Rich Presence
-	// 	{ "2m Walls", "TwoMeterWalls", "7NEYeWC3Mf5Rqa" }, // 2m Walls
-	// 	{ "More Players", "MorePlayers", "CMA7t3H6L1dkWT" }, // More Players
-	// 	{ "Mod Update Notifier", "ModUpdateNotifier", "8KzYMxowiUmKLn" } // Mod Update Notifier
-	// };
+		// const TArray<FModNotifierInfo> ModList = {
+		// 	{ "Better Grass", "BetterGrass", "4S2xwMEFdMKymS" },// Better Grass
+		// 	{ "SatisWHACKtory", "ObstacleMod", "8XYLMRNbnfzc2G" }, // SatisWHACKtory
+		// 	{ "Remove All Annoyances", "RemoveAllAnnoyances", "FGnDVTV2ygmANY" }, // Remove All Annoyances
+		// 	{ "Factory Props", "Factory_Prop_Mod", "8ivr6Mvuv4sCkX" }, // Factory Props
+		// 	{ "Discord Rich Presence", "FG_DiscordRP", "2t2nCEBqMdUt1n" }, // Discord Rich Presence
+		// 	{ "2m Walls", "TwoMeterWalls", "7NEYeWC3Mf5Rqa" }, // 2m Walls
+		// 	{ "More Players", "MorePlayers", "CMA7t3H6L1dkWT" }, // More Players
+		// 	{ "Mod Update Notifier", "ModUpdateNotifier", "8KzYMxowiUmKLn" } // Mod Update Notifier
+		// };
 
-	// Should we check for updates?
-	if (!bDisableNotifications)
-	{
 		// Get all loaded mod versions and put them into an array
 		for(int32 Index = 0; Index != ModList.Num(); ++Index)
 		{
@@ -262,9 +256,4 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 void UMUNMenuModule::GetAvailableUpdates(FString& AvailableUpdates)
 {
 	AvailableUpdates = ModUpdates;
-}
-
-void UMUNMenuModule::LaunchSMM()
-{
-	FPlatformProcess::LaunchURL(*FString("smmanager://"), nullptr, nullptr);
 }

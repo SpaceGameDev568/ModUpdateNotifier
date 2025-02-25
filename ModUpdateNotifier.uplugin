@@ -1,8 +1,8 @@
 {
 	"FileVersion": 3,
 	"Version": 2,
-	"VersionName": "2.2.0",
-	"SemVersion": "2.2.0",
+	"VersionName": "2.2.1",
+	"SemVersion": "2.2.1",
 	"FriendlyName": "Mod Update Notifier",
 	"Description": "The Mod Update Notifier (MUN) notifies you in-game when a supported mod you have installed needs an update.",
 	"Category": "Modding",

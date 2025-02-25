@@ -62,13 +62,10 @@ public:
 	bool bDisableNotifications; // Whether the player has chosen to opt out of receiving notifications
 
 	UFUNCTION(BlueprintCallable, Category = "Mod Update Notifier")
-	void Init(TArray<FModUpdateNotifierInfo> ModInfoList); // Initialize the module in subclasses
+	void Init(); // Initialize the module in subclasses
 
 	UFUNCTION(BlueprintCallable, Category = "Mod Update Notifier")
 	void GetAvailableUpdates(FString& AvailableUpdates); // Allows the widget to retrieve update information after it has been created
-
-	UFUNCTION(BlueprintCallable, Category = "Mod Update Notifier")
-	static void LaunchSMM();
 
 	void OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful); // Triggered when we receive a response from the Satisfactory Mod Repository (https://api.ficsit.app/v1/) REST API
 };
