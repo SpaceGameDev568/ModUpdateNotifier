@@ -87,19 +87,6 @@ void UMUNMenuModule::Init()
 			}
 		}
 
-		// List out the info for each mod manually (NOT USED CURRENTLY)
-
-		// const TArray<FModNotifierInfo> ModList = {
-		// 	{ "Better Grass", "BetterGrass", "4S2xwMEFdMKymS" },// Better Grass
-		// 	{ "SatisWHACKtory", "ObstacleMod", "8XYLMRNbnfzc2G" }, // SatisWHACKtory
-		// 	{ "Remove All Annoyances", "RemoveAllAnnoyances", "FGnDVTV2ygmANY" }, // Remove All Annoyances
-		// 	{ "Factory Props", "Factory_Prop_Mod", "8ivr6Mvuv4sCkX" }, // Factory Props
-		// 	{ "Discord Rich Presence", "FG_DiscordRP", "2t2nCEBqMdUt1n" }, // Discord Rich Presence
-		// 	{ "2m Walls", "TwoMeterWalls", "7NEYeWC3Mf5Rqa" }, // 2m Walls
-		// 	{ "More Players", "MorePlayers", "CMA7t3H6L1dkWT" }, // More Players
-		// 	{ "Mod Update Notifier", "ModUpdateNotifier", "8KzYMxowiUmKLn" } // Mod Update Notifier
-		// };
-
 		// Get all loaded mod versions and put them into an array
 		for(int32 Index = 0; Index != ModList.Num(); ++Index)
 		{
