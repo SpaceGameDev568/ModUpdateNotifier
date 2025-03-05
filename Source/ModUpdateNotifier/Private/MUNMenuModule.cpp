@@ -85,7 +85,7 @@ void UMUNMenuModule::Init()
 				// 	UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Could not find SMR_ID field for mod: %s"), *CurrentLoadedMod.FriendlyName);
 				// }
 			}
-		}
+		}7
 
 		// Get all loaded mod versions and put them into an array
 		for(int32 Index = 0; Index != ModList.Num(); ++Index)

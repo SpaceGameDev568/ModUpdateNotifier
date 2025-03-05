@@ -1,10 +1,10 @@
 {
 	"FileVersion": 3,
 	"Version": 2,
-	"VersionName": "2.2.2",
-	"SemVersion": "2.2.2",
+	"VersionName": "2.2.3",
+	"SemVersion": "2.2.3",
 	"FriendlyName": "Mod Update Notifier",
-	"Description": "The Mod Update Notifier (MUN) notifies you in-game when a supported mod you have installed needs an update.",
+	"Description": "The Mod Update Notifier (MUN) notifies you in-game when an installed needs an update.",
 	"Category": "Modding",
 	"CreatedBy": "SpaceGameDev",
 	"CreatedByURL": "https://spacegamedev.com",
