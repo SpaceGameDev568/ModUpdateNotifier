@@ -27,6 +27,38 @@ public:
 	FString ModID;
 };
 
+USTRUCT(BlueprintType)
+struct FAvailableUpdateInfo
+{
+	GENERATED_BODY()
+
+public:
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString ModFriendlyName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString ModReference;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString ModExistingVersion;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString ModAvailableVersion;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString ModChangelog;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString ModDonationURL;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bModHasDonationURL;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString ModAuthor;
+};
+
 UCLASS()
 class MODUPDATENOTIFIER_API UMUNMenuModule : public UMenuWorldModule
 {
@@ -39,23 +71,35 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TSubclassOf<UUserWidget> MenuWidgetClass; // The notification widget class to show on the main menu
 
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(BlueprintReadOnly)
 	TArray<FString> InstalledModFriendlyNames; // Human-readable names of installed mods
 
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(BlueprintReadOnly)
 	TArray<FString> InstalledMods; // Mods that are installed
 
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(BlueprintReadOnly)
 	TArray<FString> InstalledModIDs; // Satisfactory Mod Repository (https://ficsit.app) Mod IDs used in the REST API
 
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(BlueprintReadOnly)
 	TArray<FVersion> InstalledModVersions; // Known versions of installed mods
 
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(BlueprintReadOnly)
+	TArray<FString> ModChangelogs;
+
+	UPROPERTY(BlueprintReadOnly)
 	TArray<FString> APIVersions; // Remote versions of installed mods from the Satisfactory Mod Repository (https://ficsit.app)
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	FString ModUpdates; // List of available mod updates to be shown to the player in the notification
+	UPROPERTY(BlueprintReadOnly)
+	TArray<FString> ModAuthors;
+
+	UPROPERTY(BlueprintReadOnly)
+	TArray<FString> SupportURLs;
+
+	UPROPERTY(BlueprintReadOnly)
+	TArray<bool> HasSupportURLs;
+
+	UPROPERTY(BlueprintReadOnly)
+	TArray<FAvailableUpdateInfo> AvailableUpdates; // Known versions of installed mods
 
 	FModUpdateNotifier_ConfigStruct ModNotifierConfig; // Our global mod configuration structure
 
@@ -65,7 +109,15 @@ public:
 	void Init(); // Initialize the module in subclasses
 
 	UFUNCTION(BlueprintCallable, Category = "Mod Update Notifier")
-	void GetAvailableUpdates(FString& AvailableUpdates); // Allows the widget to retrieve update information after it has been created
+	void GetAvailableUpdates(TArray<FAvailableUpdateInfo>& OutAvailableUpdates) const; // Allows the widget to retrieve update information after it has been created. ONLY CALL THIS FROM Widget_MUN_Notification
 
-	void OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful); // Triggered when we receive a response from the Satisfactory Mod Repository (https://api.ficsit.app/v1/) REST API
+	UFUNCTION(BlueprintCallable, Category = "Mod Update Notifier")
+	void GetChangelog(FString ModReference); // Allows the widget to retrieve a specific mod's changelog
+
+	UFUNCTION(BlueprintCallable, BlueprintImplementableEvent)
+	void ChangelogProcessed(const FString& Changelog); // Allows the widget to retrieve a specific mod's changelog
+
+	void OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, const bool bWasSuccessful); // Triggered when we receive a response from the Satisfactory Mod Repository (https://api.ficsit.app/v1/) REST API
+
+	void OnChangelogReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, const bool bWasSuccessful);
 };

@@ -6,6 +6,7 @@
 #include "FGBlueprintFunctionLibrary.h"
 #include "ModUpdateNotifier.h"
 #include "Http.h"
+#include "MaxElement.h"
 #include "Kismet/KismetStringLibrary.h"
 #include "ModLoading/ModLoadingLibrary.h"
 #include "WorldModuleManager.h"
@@ -46,75 +47,96 @@ void UMUNMenuModule::Init()
 		// Get a list of all loaded mods, we loop through this to check if each mod has the SMR_ID property
 		TArray<FModInfo> LoadedMods = ModLoadingLibrary->GetLoadedMods();
 
-		// Create the array of mod info for checking later
-		TArray<FModUpdateNotifierInfo> ModList;
-
-		// Check all loaded mods
-		for (auto& CurrentLoadedMod : LoadedMods)
-		{
-			// If we find a module for the currently loaded mod, continue
-			if (WorldModuleManager->FindModule(FName(*CurrentLoadedMod.Name)))
-			{
-				// Create a variable to hold the mod module
-				UWorldModule* Mod = WorldModuleManager->FindModule(FName(*CurrentLoadedMod.Name));
-
-				// Based on this post: https://forums.unrealengine.com/t/how-to-get-a-string-property-by-name/266008
-				//
-				// Check if the module has an SMR_ID property
-				if (Mod->GetClass()->FindPropertyByName("ModUpdateNotifier_SMR_ID")->IsValidLowLevel())
-				{
-					// Get a reference to the SMR_ID property and assign its value to a variable
-					FProperty* Property = Mod->GetClass()->FindPropertyByName("ModUpdateNotifier_SMR_ID");
-
-					FStrProperty* StringProperty = CastField<FStrProperty>(Property);
-
-					void* PropertyAddress = Property->ContainerPtrToValuePtr<void>(Mod);
-
-					FString OutValue = StringProperty->GetPropertyValue(PropertyAddress);
-
-					// Assign the info from the mod along with its SMR ID to a struct, then add it to the list of mods to check for updates
-					FModUpdateNotifierInfo MUNInfo = {
-						CurrentLoadedMod.FriendlyName,
-						CurrentLoadedMod.Name,
-						OutValue
-					};
-
-					ModList.Add(MUNInfo);
-				}
-				// DEBUG: else {
-				// 	UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Could not find SMR_ID field for mod: %s"), *CurrentLoadedMod.FriendlyName);
-				// }
-			}
-		}7
-
 		// Get all loaded mod versions and put them into an array
-		for(int32 Index = 0; Index != ModList.Num(); ++Index)
+		for(int32 Index = 0; Index != LoadedMods.Num(); ++Index)
 		{
-			const FString CurrentModName = ModList[Index].ModName;
+			const FString CurrentModName = LoadedMods[Index].Name;
 
 			if(ModLoadingLibrary->IsModLoaded(CurrentModName))
 			{
+				bool OptedOut = false;
 				FModInfo ModInfo;
 				ModLoadingLibrary->GetLoadedModInfo(CurrentModName, ModInfo);
 
-				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Added %s to mod version list."), *ModInfo.FriendlyName);
+				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Detected mod: %s."), *ModInfo.FriendlyName);
 
-				APIVersions.Add("Unfulfilled");
-				InstalledMods.Add(CurrentModName);
-				InstalledModVersions.Add(ModInfo.Version);
-				InstalledModIDs.Add(ModList[Index].ModID);
-				InstalledModFriendlyNames.Add(ModList[Index].ModFriendlyName);
+				// If we find a module for the currently loaded mod, continue
+				if (WorldModuleManager->FindModule(FName(*LoadedMods[Index].Name)))
+				{
+					// Create a variable to hold the mod module
+					UWorldModule* Mod = WorldModuleManager->FindModule(FName(*LoadedMods[Index].Name));
+
+					// Based on this post: https://forums.unrealengine.com/t/how-to-get-a-string-property-by-name/266008
+
+					if (Mod->GetClass()->FindPropertyByName("ModUpdateNotifier_OptOut")->IsValidLowLevel())
+					{
+						// Get a reference to the OptOut property and assign its value to a variable
+						FProperty* Property = Mod->GetClass()->FindPropertyByName("ModUpdateNotifier_OptOut");
+
+						FBoolProperty* BoolProperty = CastField<FBoolProperty>(Property);
+
+						void* PropertyAddress = Property->ContainerPtrToValuePtr<void>(Mod);
+
+						OptedOut = BoolProperty->GetPropertyValue(PropertyAddress);
+					}
+					if (!OptedOut)
+					{
+						// Check if the module has a Support_URL property
+						if (Mod->GetClass()->FindPropertyByName("ModUpdateNotifier_Support_URL")->IsValidLowLevel())
+						{
+							// Get a reference to the Support_URL property and assign its value to a variable
+							FProperty* Property = Mod->GetClass()->FindPropertyByName("ModUpdateNotifier_Support_URL");
+
+							FStrProperty* StringProperty = CastField<FStrProperty>(Property);
+
+							void* PropertyAddress = Property->ContainerPtrToValuePtr<void>(Mod);
+
+							FString OutValue = StringProperty->GetPropertyValue(PropertyAddress);
+
+							SupportURLs.Add(OutValue);
+							HasSupportURLs.Add(true);
+						}
+						else {
+							UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Could not find Support_URL field for mod: %s"), *LoadedMods[Index].FriendlyName);
+
+							SupportURLs.Add("none");
+							HasSupportURLs.Add(false);
+						}
+					}
+				}
+				else
+				{
+					if (!OptedOut)
+					{
+						SupportURLs.Add("none");
+						HasSupportURLs.Add(false);
+					}
+				}
+
+				if (!OptedOut)
+				{
+					APIVersions.Add("Unfulfilled");
+					ModChangelogs.Add("Unfulfilled");
+					InstalledMods.Add(CurrentModName);
+					InstalledModVersions.Add(ModInfo.Version);
+					InstalledModFriendlyNames.Add(LoadedMods[Index].FriendlyName);
+					ModAuthors.Add(LoadedMods[Index].CreatedBy);
+				}
+				else
+				{
+					UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Mod opted-out of update checking: %s"), *LoadedMods[Index].FriendlyName);
+				}
 			}
 		}
 
 		// Create an HTTP request to send to the ficsit.app REST API to get the latest version(s) for each mod
-		for(auto& CurrentModID : InstalledModIDs)
+		for(auto& CurrentModReference : InstalledMods)
 		{
 			// Create an HTTP GET request
 			FHttpRequestRef Request =  FHttpModule::Get().CreateRequest();
 			TSharedRef<FJsonObject> RequestObj = MakeShared<FJsonObject>();
 			Request->OnProcessRequestComplete().BindUObject(this, &UMUNMenuModule::OnResponseReceived);
-			Request->SetURL("https://api.ficsit.app/v1/mod/" + CurrentModID + "/latest-versions");
+			Request->SetURL("https://api.ficsit.app/v1/mod/" + CurrentModReference + "/versions/all");
 			Request->SetVerb("GET");
 
 			Request->ProcessRequest();
@@ -122,46 +144,67 @@ void UMUNMenuModule::Init()
 	}
 }
 
-// Parse the HTTP response to extract the data we want: "mod_id" and "version"
+// Parse the HTTP response to extract the data we want: "mod_reference" and "version"
 void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, const bool bWasSuccessful)
 {
 	if(bWasSuccessful){
+
+		FString LeftStringOut;
+		FString RightStringOut;
+		FString ModReference;
+		Request->GetURL().Split("https://api.ficsit.app/v1/mod/", &LeftStringOut, &RightStringOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+		RightStringOut.Split("/versions/all", &ModReference, &RightStringOut, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
 
 		// Create our JSON object
 		TSharedPtr<FJsonObject> ResponseObj;
 		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Response->GetContentAsString());
 		FJsonSerializer::Deserialize(Reader, ResponseObj);
 
-		if(ResponseObj && ResponseObj->HasField("data"))
+		// https://forums.unrealengine.com/t/parse-json-file-with-array-of-objects-without-converting-to-ustruct/650839/7
+		if(ResponseObj.IsValid() && ResponseObj->HasField("data"))
 		{
-			// Create more objects to narrow down the field to a valid release, beta, or alpha version.
-			const TSharedPtr<FJsonObject> DataObj = ResponseObj->GetObjectField("data");
-			TSharedPtr<FJsonObject> ReleaseObj;
+			const TArray<TSharedPtr<FJsonValue>> DataArrayObj = ResponseObj->GetArrayField(ANSI_TO_TCHAR("data"));
 
-			// Check if there is a release of the mod available. If there is not, fall back to a beta or alpha release.
-			if (DataObj->HasField("release"))
+			FString HighestVersion = "0.0.0";
+			for (auto ArrayItem : DataArrayObj)
 			{
-				ReleaseObj = DataObj->GetObjectField("release");
-			}
-			else if (DataObj->HasField("beta"))
-			{
-				ReleaseObj = DataObj->GetObjectField("beta");
-			}
-			else if (DataObj->HasField("alpha"))
-			{
-				ReleaseObj = DataObj->GetObjectField("alpha");
-			}
-			else
-			{
-				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Response does not contain a release of any kind."));
+				TSharedPtr<FJsonObject> JsonObject = ArrayItem->AsObject();
+
+				// DEBUG
+				// UE_LOG(LogModUpdateNotifier, Verbose, TEXT("version: %s"), *JsonObject->GetStringField(ANSI_TO_TCHAR("version")));
+
+				FString Version = JsonObject->GetStringField(ANSI_TO_TCHAR("version"));
+
+				FString MajorVersionOut;
+				FString MinorVersionOut;
+				FString PatchVersionOut;
+				Version.Split(".", &MajorVersionOut,&MinorVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+				MinorVersionOut.Split(".", &MinorVersionOut, &PatchVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+
+				FString HighestMajorVersionOut;
+				FString HighestMinorVersionOut;
+				FString HighestPatchVersionOut;
+				HighestVersion.Split(".", &HighestMajorVersionOut,&HighestMinorVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+				HighestMinorVersionOut.Split(".", &HighestMinorVersionOut, &HighestPatchVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+
+				// Check though the major, minor, and patch numbers from the API response sequentially to see if it is greater than the known version.
+				if(UKismetStringLibrary::Conv_StringToInt(MajorVersionOut) > UKismetStringLibrary::Conv_StringToInt(HighestMajorVersionOut))
+				{
+					HighestVersion = Version;
+				} // If the remote Minor version is greater AND the remote Major version is greater than or equal to the local version
+				else if (UKismetStringLibrary::Conv_StringToInt(MinorVersionOut) > UKismetStringLibrary::Conv_StringToInt(HighestMinorVersionOut) && UKismetStringLibrary::Conv_StringToInt(MajorVersionOut) >= UKismetStringLibrary::Conv_StringToInt(HighestMajorVersionOut))
+				{
+					HighestVersion = Version;
+				} // If the remote Patch version is greater AND the remote Minor version is greater than or equal to the local version
+				else if (UKismetStringLibrary::Conv_StringToInt(PatchVersionOut) > UKismetStringLibrary::Conv_StringToInt(HighestPatchVersionOut) && UKismetStringLibrary::Conv_StringToInt(MinorVersionOut) >= UKismetStringLibrary::Conv_StringToInt(HighestMinorVersionOut) && UKismetStringLibrary::Conv_StringToInt(MajorVersionOut) >= UKismetStringLibrary::Conv_StringToInt(HighestMajorVersionOut))
+				{
+					HighestVersion = Version;
+				}
 			}
 
-			// Put the response info into variables
-			const FString ResponseID = ReleaseObj->GetStringField("mod_id");
-			const FString ResponseVersion = ReleaseObj->GetStringField("version");
+			APIVersions[InstalledMods.Find(ModReference)] = HighestVersion;
 
-			// Add the version response to the API version array at the corresponding index of the mod ID for future retrieval
-			APIVersions[InstalledModIDs.Find(ResponseID)] = ResponseVersion;
+			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("%s: %s"), *ModReference, *HighestVersion);
 		}
 		else
 		{
@@ -198,7 +241,7 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 
 					IsModOutOfDate = true;
 				} // If the remote Patch version is greater AND the remote Minor version is greater than or equal to the local version
-				else if (UKismetStringLibrary::Conv_StringToInt(PatchVersionOut) > InstalledModVersions[Index].Patch && UKismetStringLibrary::Conv_StringToInt(MinorVersionOut) >= InstalledModVersions[Index].Minor)
+				else if (UKismetStringLibrary::Conv_StringToInt(PatchVersionOut) > InstalledModVersions[Index].Patch && UKismetStringLibrary::Conv_StringToInt(MinorVersionOut) >= InstalledModVersions[Index].Minor && UKismetStringLibrary::Conv_StringToInt(MajorVersionOut) >= InstalledModVersions[Index].Major)
 				{
 					UE_LOG(LogModUpdateNotifier, Verbose, TEXT("There is a newer version of this mod available since the patch version is lower than the retrieved one. %s"), *InstalledMods[Index]);
 
@@ -209,19 +252,35 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 					UE_LOG(LogModUpdateNotifier, Verbose, TEXT("The installed mod is up to date or newer than the available versions on SMR. %s"), *InstalledMods[Index]);
 				}
 
+				if (IsModOutOfDate)
+				{
+					FAvailableUpdateInfo ModAvailableUpdate = {
+						InstalledModFriendlyNames[Index],
+						InstalledMods[Index],
+						InstalledModVersions[Index].ToString(),
+						APIVersions[Index],
+						ModChangelogs[Index],
+						SupportURLs[Index], // IMPORTANT: REMOVE THIS BEFORE RELEASE
+						HasSupportURLs[Index],
+						ModAuthors[Index],
+					};
+
+					AvailableUpdates.Add(ModAvailableUpdate);
+				}
+
 				// If a mod has updates available and the list is not empty, add it to the list on a new line
-				if(ModUpdates.IsEmpty() && IsModOutOfDate == true)
-				{
-					ModUpdates = InstalledModFriendlyNames[Index] + " " + InstalledModVersions[Index].ToString() + " -> " + APIVersions[Index];
-				}
-				else if (IsModOutOfDate == true)
-				{
-					ModUpdates = ModUpdates + ",\n" + InstalledModFriendlyNames[Index] + " " + InstalledModVersions[Index].ToString() + " -> " + APIVersions[Index];
-				}
+				//if(ModUpdates.IsEmpty() && IsModOutOfDate == true)
+				//{
+				//	ModUpdates = InstalledModFriendlyNames[Index] + " " + InstalledModVersions[Index].ToString() + " -> " + APIVersions[Index];
+				//}
+				//else if (IsModOutOfDate == true)
+				//{
+				//	ModUpdates = ModUpdates + ",\n" + InstalledModFriendlyNames[Index] + " " + InstalledModVersions[Index].ToString() + " -> " + APIVersions[Index];
+				//}
 			}
 
 			// If there are out of date mods in the list, create the menu widget. Also check if we are running on a server and not display the menu widget.
-			if (!ModUpdates.IsEmpty() && this->GetWorld()->GetNetMode() != NM_DedicatedServer)
+			if (!AvailableUpdates.IsEmpty() && this->GetWorld()->GetNetMode() != NM_DedicatedServer)
 			{
 				// Add the popup in the Main Menu
 				const FPopupClosed CloseDelegate;
@@ -235,12 +294,67 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 		}
 	}
 	else {
-		UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Unable to connect to API, user may be offline."));
+		UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Unable to connect to the API, user may be offline."));
 	}
 
 }
 
-void UMUNMenuModule::GetAvailableUpdates(FString& AvailableUpdates)
+void UMUNMenuModule::GetAvailableUpdates(TArray<FAvailableUpdateInfo>& OutAvailableUpdates) const
 {
-	AvailableUpdates = ModUpdates;
+	OutAvailableUpdates = AvailableUpdates;
+}
+
+void UMUNMenuModule::GetChangelog(const FString ModReference)
+{
+	if (ModChangelogs[InstalledMods.Find(ModReference)] != "Unfulfilled")
+	{
+		ChangelogProcessed(ModChangelogs[InstalledMods.Find(ModReference)]);
+	}
+	else
+	{
+		// Create an HTTP GET request
+		const FHttpRequestRef Request =  FHttpModule::Get().CreateRequest();
+		TSharedRef<FJsonObject> RequestObj = MakeShared<FJsonObject>();
+		Request->OnProcessRequestComplete().BindUObject(this, &UMUNMenuModule::OnChangelogReceived);
+		Request->SetURL("https://api.ficsit.app/v2/query");
+		Request->SetContentAsString("{\"query\": \"{ getModByReference(modReference:" + ModReference + ") { version(version: \\\"" + APIVersions[InstalledMods.Find(ModReference)] + "\\\") { changelog mod { mod_reference } } } }\"}");
+
+
+		Request->SetVerb("POST");
+		Request->SetHeader(TEXT("User-Agent"), "X-UnrealEngine-Agent");
+		Request->SetHeader("Content-Type", TEXT("application/json"));
+
+		Request->ProcessRequest();
+	}
+}
+
+void UMUNMenuModule::OnChangelogReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, const bool bWasSuccessful)
+{
+	if(bWasSuccessful)
+	{
+		// Create our JSON object
+		TSharedPtr<FJsonObject> ResponseObj;
+		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Response->GetContentAsString());
+		FJsonSerializer::Deserialize(Reader, ResponseObj);
+
+		if(ResponseObj && ResponseObj->HasField("data"))
+		{
+			// Create more objects to narrow down the field to a valid release, beta, or alpha version.
+			if(const TSharedPtr<FJsonObject> DataObj = ResponseObj->GetObjectField("data"); DataObj && DataObj->HasField("getModByReference"))
+			{
+				const TSharedPtr<FJsonObject> VersionObj = ResponseObj->GetObjectField("data")->GetObjectField("getModByReference")->GetObjectField("version");
+
+				const FString ModReference = VersionObj->GetObjectField("mod")->GetStringField("mod_reference");
+
+				const FString Changelog = VersionObj->GetStringField("changelog");
+
+				ModChangelogs[InstalledMods.Find(ModReference)] = Changelog;
+
+				ChangelogProcessed(Changelog);
+			}
+		}
+	}
+	else {
+		UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Unable to connect to the API, user may be offline."));
+	}
 }
