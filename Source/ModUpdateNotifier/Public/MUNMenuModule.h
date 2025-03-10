@@ -11,24 +11,7 @@
 #include "MUNMenuModule.generated.h"
 
 USTRUCT(BlueprintType)
-struct FModUpdateNotifierInfo
-{
-	GENERATED_BODY()
-
-public:
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FString ModFriendlyName;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FString ModName;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FString ModID;
-};
-
-USTRUCT(BlueprintType)
-struct FAvailableUpdateInfo
+struct FAvailableUpdateInfo // Struct containing all info from the arrays for each mod
 {
 	GENERATED_BODY()
 
@@ -84,19 +67,19 @@ public:
 	TArray<FVersion> InstalledModVersions; // Known versions of installed mods
 
 	UPROPERTY(BlueprintReadOnly)
-	TArray<FString> ModChangelogs;
+	TArray<FString> ModChangelogs; // Previously fetched mod changelogs
 
 	UPROPERTY(BlueprintReadOnly)
 	TArray<FString> APIVersions; // Remote versions of installed mods from the Satisfactory Mod Repository (https://ficsit.app)
 
 	UPROPERTY(BlueprintReadOnly)
-	TArray<FString> ModAuthors;
+	TArray<FString> ModAuthors; // Mod Authors
 
 	UPROPERTY(BlueprintReadOnly)
-	TArray<FString> SupportURLs;
+	TArray<FString> SupportURLs; // Supplied URLs for mod donation platforms. Filled with "none" if no URL is supplied.
 
 	UPROPERTY(BlueprintReadOnly)
-	TArray<bool> HasSupportURLs;
+	TArray<bool> HasSupportURLs; // Whether a mod has supplied a support URL
 
 	UPROPERTY(BlueprintReadOnly)
 	TArray<FAvailableUpdateInfo> AvailableUpdates; // Known versions of installed mods

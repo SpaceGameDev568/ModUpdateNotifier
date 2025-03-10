@@ -6,7 +6,6 @@
 #include "FGBlueprintFunctionLibrary.h"
 #include "ModUpdateNotifier.h"
 #include "Http.h"
-#include "MaxElement.h"
 #include "Kismet/KismetStringLibrary.h"
 #include "ModLoading/ModLoadingLibrary.h"
 #include "WorldModuleManager.h"
@@ -170,9 +169,6 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 			{
 				TSharedPtr<FJsonObject> JsonObject = ArrayItem->AsObject();
 
-				// DEBUG
-				// UE_LOG(LogModUpdateNotifier, Verbose, TEXT("version: %s"), *JsonObject->GetStringField(ANSI_TO_TCHAR("version")));
-
 				FString Version = JsonObject->GetStringField(ANSI_TO_TCHAR("version"));
 
 				FString MajorVersionOut;
@@ -260,23 +256,13 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 						InstalledModVersions[Index].ToString(),
 						APIVersions[Index],
 						ModChangelogs[Index],
-						SupportURLs[Index], // IMPORTANT: REMOVE THIS BEFORE RELEASE
+						SupportURLs[Index],
 						HasSupportURLs[Index],
 						ModAuthors[Index],
 					};
 
 					AvailableUpdates.Add(ModAvailableUpdate);
 				}
-
-				// If a mod has updates available and the list is not empty, add it to the list on a new line
-				//if(ModUpdates.IsEmpty() && IsModOutOfDate == true)
-				//{
-				//	ModUpdates = InstalledModFriendlyNames[Index] + " " + InstalledModVersions[Index].ToString() + " -> " + APIVersions[Index];
-				//}
-				//else if (IsModOutOfDate == true)
-				//{
-				//	ModUpdates = ModUpdates + ",\n" + InstalledModFriendlyNames[Index] + " " + InstalledModVersions[Index].ToString() + " -> " + APIVersions[Index];
-				//}
 			}
 
 			// If there are out of date mods in the list, create the menu widget. Also check if we are running on a server and not display the menu widget.
@@ -319,9 +305,8 @@ void UMUNMenuModule::GetChangelog(const FString ModReference)
 		Request->SetURL("https://api.ficsit.app/v2/query");
 		Request->SetContentAsString("{\"query\": \"{ getModByReference(modReference:" + ModReference + ") { version(version: \\\"" + APIVersions[InstalledMods.Find(ModReference)] + "\\\") { changelog mod { mod_reference } } } }\"}");
 
-
 		Request->SetVerb("POST");
-		Request->SetHeader(TEXT("User-Agent"), "X-UnrealEngine-Agent");
+		Request->SetHeader(TEXT("User-Agent"), "X-UE5-ModUpdateNotifier-Agent");
 		Request->SetHeader("Content-Type", TEXT("application/json"));
 
 		Request->ProcessRequest();
@@ -339,7 +324,6 @@ void UMUNMenuModule::OnChangelogReceived(FHttpRequestPtr Request, FHttpResponseP
 
 		if(ResponseObj && ResponseObj->HasField("data"))
 		{
-			// Create more objects to narrow down the field to a valid release, beta, or alpha version.
 			if(const TSharedPtr<FJsonObject> DataObj = ResponseObj->GetObjectField("data"); DataObj && DataObj->HasField("getModByReference"))
 			{
 				const TSharedPtr<FJsonObject> VersionObj = ResponseObj->GetObjectField("data")->GetObjectField("getModByReference")->GetObjectField("version");
