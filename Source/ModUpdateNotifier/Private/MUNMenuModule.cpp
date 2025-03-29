@@ -6,6 +6,7 @@
 #include "FGBlueprintFunctionLibrary.h"
 #include "ModUpdateNotifier.h"
 #include "Http.h"
+#include "JsonSerializer.h"
 #include "Kismet/KismetStringLibrary.h"
 #include "ModLoading/ModLoadingLibrary.h"
 #include "WorldModuleManager.h"
@@ -22,6 +23,9 @@ UMUNMenuModule::UMUNMenuModule()
 	}
 
 	bDisableNotifications = ModNotifierConfig.bDisableNotifications;
+
+	APIIndex = 0;
+	APIIndexRetrieved = 0;
 }
 
 void UMUNMenuModule::Init()
@@ -114,7 +118,8 @@ void UMUNMenuModule::Init()
 
 				if (!OptedOut)
 				{
-					APIVersions.Add("Unfulfilled");
+					APIVersions.Add({0,0,0});
+					APIIndex++;
 					ModChangelogs.Add("Unfulfilled");
 					InstalledMods.Add(CurrentModName);
 					InstalledModVersions.Add(ModInfo.Version);
@@ -162,85 +167,69 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 		// https://forums.unrealengine.com/t/parse-json-file-with-array-of-objects-without-converting-to-ustruct/650839/7
 		if(ResponseObj.IsValid() && ResponseObj->HasField("data"))
 		{
+			// Find the highest version from the API
 			const TArray<TSharedPtr<FJsonValue>> DataArrayObj = ResponseObj->GetArrayField(ANSI_TO_TCHAR("data"));
 
-			FString HighestVersion = "0.0.0";
+			FVersion HighestVersion = {0,0,0};
+
 			for (auto ArrayItem : DataArrayObj)
 			{
 				TSharedPtr<FJsonObject> JsonObject = ArrayItem->AsObject();
 
 				FString Version = JsonObject->GetStringField(ANSI_TO_TCHAR("version"));
 
-				FString MajorVersionOut;
-				FString MinorVersionOut;
-				FString PatchVersionOut;
-				Version.Split(".", &MajorVersionOut,&MinorVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
-				MinorVersionOut.Split(".", &MinorVersionOut, &PatchVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+				if (!Version.Contains("-"))
+				{
+					FString MajorVersionOut;
+					FString MinorVersionOut;
+					FString PatchVersionOut;
+					Version.Split(".", &MajorVersionOut,&MinorVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+					MinorVersionOut.Split(".", &MinorVersionOut, &PatchVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
 
-				FString HighestMajorVersionOut;
-				FString HighestMinorVersionOut;
-				FString HighestPatchVersionOut;
-				HighestVersion.Split(".", &HighestMajorVersionOut,&HighestMinorVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
-				HighestMinorVersionOut.Split(".", &HighestMinorVersionOut, &HighestPatchVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
 
-				// Check though the major, minor, and patch numbers from the API response sequentially to see if it is greater than the known version.
-				if(UKismetStringLibrary::Conv_StringToInt(MajorVersionOut) > UKismetStringLibrary::Conv_StringToInt(HighestMajorVersionOut))
-				{
-					HighestVersion = Version;
-				} // If the remote Minor version is greater AND the remote Major version is greater than or equal to the local version
-				else if (UKismetStringLibrary::Conv_StringToInt(MinorVersionOut) > UKismetStringLibrary::Conv_StringToInt(HighestMinorVersionOut) && UKismetStringLibrary::Conv_StringToInt(MajorVersionOut) >= UKismetStringLibrary::Conv_StringToInt(HighestMajorVersionOut))
-				{
-					HighestVersion = Version;
-				} // If the remote Patch version is greater AND the remote Minor version is greater than or equal to the local version
-				else if (UKismetStringLibrary::Conv_StringToInt(PatchVersionOut) > UKismetStringLibrary::Conv_StringToInt(HighestPatchVersionOut) && UKismetStringLibrary::Conv_StringToInt(MinorVersionOut) >= UKismetStringLibrary::Conv_StringToInt(HighestMinorVersionOut) && UKismetStringLibrary::Conv_StringToInt(MajorVersionOut) >= UKismetStringLibrary::Conv_StringToInt(HighestMajorVersionOut))
-				{
-					HighestVersion = Version;
+
+					FVersion OutVersion = {
+						UKismetStringLibrary::Conv_StringToInt64(MajorVersionOut),
+						UKismetStringLibrary::Conv_StringToInt64(MinorVersionOut),
+						UKismetStringLibrary::Conv_StringToInt64(PatchVersionOut),
+					};
+
+					if (OutVersion.Compare(HighestVersion) == 1)
+					{
+						HighestVersion = OutVersion;
+					}
 				}
+				else
+				{
+					UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Version %s contains a `-`, excluding."), *Version);
+				}
+
+
 			}
 
 			APIVersions[InstalledMods.Find(ModReference)] = HighestVersion;
 
-			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("%s: %s"), *ModReference, *HighestVersion);
+			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("%s: %s"), *ModReference, *HighestVersion.ToString());
 		}
 		else
 		{
 			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Invalid response: no field \"data\" found."));
 		}
 
-		// If the API version list is complete, compare it to the known version list
-		if(!APIVersions.Contains("Unfulfilled"))
+		APIIndexRetrieved++;
+
+		// If the API version list is as long as the list of mods we've asked for, compare it to the known version list
+		if(APIIndex == APIIndexRetrieved)
 		{
-			for (auto& CurrentAPIVersionString : APIVersions)
+			for (int Index = 0; Index < APIVersions.Num(); Index++)
 			{
 				bool IsModOutOfDate = false;
 
 				// Create an index of the current version in the array that we are processing
-				const int Index = APIVersions.Find(CurrentAPIVersionString);
+				FVersion CurrentAPIVersion = APIVersions[Index];
 
-				// Create variables for the major, minor, and patch version numbers from the API response to be compared against the known version
-				FString MajorVersionOut;
-				FString MinorVersionOut;
-				FString PatchVersionOut;
-				CurrentAPIVersionString.Split(".", &MajorVersionOut,&MinorVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
-				MinorVersionOut.Split(".", &MinorVersionOut, &PatchVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
-
-				// Check though the major, minor, and patch numbers from the API response sequentially to see if it is greater than the known version.
-				if(UKismetStringLibrary::Conv_StringToInt(MajorVersionOut) > InstalledModVersions[Index].Major)
+				if (CurrentAPIVersion.Compare(InstalledModVersions[Index]) == 1)
 				{
-					UE_LOG(LogModUpdateNotifier, Verbose, TEXT("There is a newer version of this mod available since the major version is lower than the retrieved one. %s"), *InstalledMods[Index]);
-
-					IsModOutOfDate = true;
-				} // If the remote Minor version is greater AND the remote Major version is greater than or equal to the local version
-				else if (UKismetStringLibrary::Conv_StringToInt(MinorVersionOut) > InstalledModVersions[Index].Minor && UKismetStringLibrary::Conv_StringToInt(MajorVersionOut) >= InstalledModVersions[Index].Major)
-				{
-					UE_LOG(LogModUpdateNotifier, Verbose, TEXT("There is a newer version of this mod available since the minor version is lower than the retrieved one. %s"), *InstalledMods[Index]);
-
-					IsModOutOfDate = true;
-				} // If the remote Patch version is greater AND the remote Minor version is greater than or equal to the local version
-				else if (UKismetStringLibrary::Conv_StringToInt(PatchVersionOut) > InstalledModVersions[Index].Patch && UKismetStringLibrary::Conv_StringToInt(MinorVersionOut) >= InstalledModVersions[Index].Minor && UKismetStringLibrary::Conv_StringToInt(MajorVersionOut) >= InstalledModVersions[Index].Major)
-				{
-					UE_LOG(LogModUpdateNotifier, Verbose, TEXT("There is a newer version of this mod available since the patch version is lower than the retrieved one. %s"), *InstalledMods[Index]);
-
 					IsModOutOfDate = true;
 				}
 				else
@@ -254,7 +243,7 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 						InstalledModFriendlyNames[Index],
 						InstalledMods[Index],
 						InstalledModVersions[Index].ToString(),
-						APIVersions[Index],
+						APIVersions[Index].ToString(),
 						ModChangelogs[Index],
 						SupportURLs[Index],
 						HasSupportURLs[Index],
@@ -271,7 +260,7 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 				// Add the popup in the Main Menu
 				const FPopupClosed CloseDelegate;
 
-				UFGBlueprintFunctionLibrary::AddPopupWithCloseDelegate(this->GetWorld()->GetGameInstance()->GetFirstLocalPlayerController(), FText::FromString("Mod Update Notifier"), FText::FromString("Body Text"), CloseDelegate, PID_NONE, MenuWidgetClass, this, false);
+				UFGBlueprintFunctionLibrary::AddPopupWithCloseDelegate(this->GetWorld()->GetFirstPlayerController(), FText::FromString("Mod Update Notifier"), FText::FromString("Body Text"), CloseDelegate, PID_NONE, MenuWidgetClass, this, false);
 			}
 			else
 			{
@@ -303,7 +292,7 @@ void UMUNMenuModule::GetChangelog(const FString ModReference)
 		TSharedRef<FJsonObject> RequestObj = MakeShared<FJsonObject>();
 		Request->OnProcessRequestComplete().BindUObject(this, &UMUNMenuModule::OnChangelogReceived);
 		Request->SetURL("https://api.ficsit.app/v2/query");
-		Request->SetContentAsString("{\"query\": \"{ getModByReference(modReference:" + ModReference + ") { version(version: \\\"" + APIVersions[InstalledMods.Find(ModReference)] + "\\\") { changelog mod { mod_reference } } } }\"}");
+		Request->SetContentAsString("{\"query\": \"{ getModByReference(modReference:" + ModReference + ") { version(version: \\\"" + APIVersions[InstalledMods.Find(ModReference)].ToString() + "\\\") { changelog mod { mod_reference } } } }\"}");
 
 		Request->SetVerb("POST");
 		Request->SetHeader(TEXT("User-Agent"), "X-UE5-ModUpdateNotifier-Agent");

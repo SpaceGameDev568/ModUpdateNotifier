@@ -55,6 +55,12 @@ public:
 	TSubclassOf<UUserWidget> MenuWidgetClass; // The notification widget class to show on the main menu
 
 	UPROPERTY(BlueprintReadOnly)
+	int APIIndex; // Index of API Versions we've asked for
+
+	UPROPERTY(BlueprintReadOnly)
+	int APIIndexRetrieved; // Index of API Versions we've received
+
+	UPROPERTY(BlueprintReadOnly)
 	TArray<FString> InstalledModFriendlyNames; // Human-readable names of installed mods
 
 	UPROPERTY(BlueprintReadOnly)
@@ -70,7 +76,7 @@ public:
 	TArray<FString> ModChangelogs; // Previously fetched mod changelogs
 
 	UPROPERTY(BlueprintReadOnly)
-	TArray<FString> APIVersions; // Remote versions of installed mods from the Satisfactory Mod Repository (https://ficsit.app)
+	TArray<FVersion> APIVersions; // Remote versions of installed mods from the Satisfactory Mod Repository (https://ficsit.app)
 
 	UPROPERTY(BlueprintReadOnly)
 	TArray<FString> ModAuthors; // Mod Authors
