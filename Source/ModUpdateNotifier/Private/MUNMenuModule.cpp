@@ -3,6 +3,7 @@
 #include "MUNMenuModule.h"
 
 #include "AkAcousticTextureSetComponent.h"
+#include "EngineVersion.h"
 #include "FGBlueprintFunctionLibrary.h"
 #include "ModUpdateNotifier.h"
 #include "Http.h"
@@ -178,33 +179,46 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 
 				FString Version = JsonObject->GetStringField(ANSI_TO_TCHAR("version"));
 
-				if (!Version.Contains("-"))
+				FString VersionSymbols;
+				FString ChangeListNumber;
+
+				JsonObject->GetStringField(ANSI_TO_TCHAR("game_version")).Split(">=", &VersionSymbols, &ChangeListNumber, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+
+				uint64 NewVersionCL = UKismetStringLibrary::Conv_StringToInt64(ChangeListNumber);
+				uint64 GameCL = FEngineVersion::Current().GetChangelist();
+
+				if (NewVersionCL <= GameCL)
 				{
-					FString MajorVersionOut;
-					FString MinorVersionOut;
-					FString PatchVersionOut;
-					Version.Split(".", &MajorVersionOut,&MinorVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
-					MinorVersionOut.Split(".", &MinorVersionOut, &PatchVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
-
-
-
-					FVersion OutVersion = {
-						UKismetStringLibrary::Conv_StringToInt64(MajorVersionOut),
-						UKismetStringLibrary::Conv_StringToInt64(MinorVersionOut),
-						UKismetStringLibrary::Conv_StringToInt64(PatchVersionOut),
-					};
-
-					if (OutVersion.Compare(HighestVersion) == 1)
+					if (!Version.Contains("-"))
 					{
-						HighestVersion = OutVersion;
+						FString MajorVersionOut;
+						FString MinorVersionOut;
+						FString PatchVersionOut;
+						Version.Split(".", &MajorVersionOut,&MinorVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+						MinorVersionOut.Split(".", &MinorVersionOut, &PatchVersionOut, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+
+
+
+						FVersion OutVersion = {
+							UKismetStringLibrary::Conv_StringToInt64(MajorVersionOut),
+							UKismetStringLibrary::Conv_StringToInt64(MinorVersionOut),
+							UKismetStringLibrary::Conv_StringToInt64(PatchVersionOut),
+						};
+
+						if (OutVersion.Compare(HighestVersion) == 1)
+						{
+							HighestVersion = OutVersion;
+						}
+					}
+					else
+					{
+						UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Version %s contains a `-`, excluding."), *Version);
 					}
 				}
 				else
 				{
-					UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Version %s contains a `-`, excluding."), *Version);
+					UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Version %s is newer than the game version, excluding."), *Version);
 				}
-
-
 			}
 
 			APIVersions[InstalledMods.Find(ModReference)] = HighestVersion;
