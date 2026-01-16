@@ -19,9 +19,8 @@ public class ModUpdateNotifier : ModuleRules
 				"Json",
 				"JsonUtilities",
 				"UMG"
-				// ... add other public dependencies that you statically link with here ...
 			}
-			);
+		);
 		
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
@@ -30,8 +29,7 @@ public class ModUpdateNotifier : ModuleRules
 				"Engine",
 				"Slate",
 				"SlateCore",
-				// ... add private dependencies that you statically link with here ...	
 			}
-			);
+		);
 	}
 }

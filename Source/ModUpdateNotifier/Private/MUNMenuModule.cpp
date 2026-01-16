@@ -182,6 +182,7 @@ void UMUNMenuModule::CheckForModUpdates()
 			Request->SetVerb("GET");
 			Request->SetHeader(TEXT("User-Agent"), "X-UE5-ModUpdateNotifier-Agent");
 
+			PendingRequests.Add(Request);
 			Request->ProcessRequest();
 		}
 	}
@@ -190,6 +191,7 @@ void UMUNMenuModule::CheckForModUpdates()
 // Parse the HTTP response to extract the data we want: "mod_reference" and "version"
 void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, const bool bWasSuccessful)
 {
+	PendingRequests.Remove(Request);
 	if(bWasSuccessful){
 
 		FString LeftStringOut;
@@ -352,12 +354,14 @@ void UMUNMenuModule::GetChangelog(const FString ModReference)
 		Request->SetHeader(TEXT("User-Agent"), "X-UE5-ModUpdateNotifier-Agent");
 		Request->SetHeader("Content-Type", TEXT("application/json"));
 
+		PendingRequests.Add(Request);
 		Request->ProcessRequest();
 	}
 }
 
 void UMUNMenuModule::OnChangelogReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, const bool bWasSuccessful)
 {
+	PendingRequests.Remove(Request);
 	if(bWasSuccessful)
 	{
 		// Create our JSON object
@@ -384,4 +388,23 @@ void UMUNMenuModule::OnChangelogReceived(FHttpRequestPtr Request, FHttpResponseP
 	else {
 		UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Unable to connect to the API, user may be offline."));
 	}
+}
+
+void UMUNMenuModule::BeginDestroy()
+{
+	CancelPendingRequests();
+	Super::BeginDestroy();
+}
+
+void UMUNMenuModule::CancelPendingRequests()
+{
+	for (const FHttpRequestPtr& Request : PendingRequests)
+	{
+		if (Request.IsValid())
+		{
+			Request->CancelRequest();
+		}
+	}
+
+	PendingRequests.Empty();
 }

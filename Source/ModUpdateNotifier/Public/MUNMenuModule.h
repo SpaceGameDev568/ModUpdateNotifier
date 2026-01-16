@@ -116,4 +116,11 @@ public:
 
 	// Triggered when we receive a response containing a mod changelog
 	void OnChangelogReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, const bool bWasSuccessful);
+
+protected:
+	virtual void BeginDestroy() override;
+
+private:
+	void CancelPendingRequests();
+	TArray<FHttpRequestPtr> PendingRequests;
 };
