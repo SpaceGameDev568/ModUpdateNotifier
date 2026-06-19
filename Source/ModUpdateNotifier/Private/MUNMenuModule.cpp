@@ -3,14 +3,15 @@
 #include "MUNMenuModule.h"
 
 #include "AkAcousticTextureSetComponent.h"
-#include "EngineVersion.h"
+#include "Modules/BuildVersion.h"
 #include "FGBlueprintFunctionLibrary.h"
 #include "ModUpdateNotifier.h"
 #include "Http.h"
-#include "JsonSerializer.h"
+#include "Serialization/JsonSerializer.h"
+#include "Logging/StructuredLog.h"
 #include "Kismet/KismetStringLibrary.h"
 #include "ModLoading/ModLoadingLibrary.h"
-#include "WorldModuleManager.h"
+#include "Module/WorldModuleManager.h"
 
 UMUNMenuModule::UMUNMenuModule()
 {
