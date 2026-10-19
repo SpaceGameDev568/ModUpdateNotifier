@@ -1,8 +1,8 @@
 {
 	"FileVersion": 3,
 	"Version": 2,
-	"VersionName": "2.5.0",
-	"SemVersion": "2.5.0",
+	"VersionName": "2.5.1",
+	"SemVersion": "2.5.1",
 	"FriendlyName": "Mod Update Notifier",
 	"Description": "The Mod Update Notifier (MUN) notifies you in-game when an installed mod needs an update.",
 	"Category": "Modding",
@@ -29,6 +29,13 @@
 			"SemVersion": "^3.12.0"
 		}
 	],
-	"GameVersion": ">=491125",
-	"RequiredOnRemote": false
+	"GameVersion": ">=502094",
+	"RequiredOnRemote": false,
+	"LocalizationTargets": [
+		{
+			"Name": "ModUpdateNotifier",
+			"LoadingPolicy": "Always",
+			"ConfigGenerationPolicy": "Never"
+		}
+	]
 }
