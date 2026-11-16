@@ -7,8 +7,8 @@
 #include "FGBlueprintFunctionLibrary.h"
 #include "ModUpdateNotifier.h"
 #include "Http.h"
+#include "Engine/GameInstance.h"
 #include "Serialization/JsonSerializer.h"
-#include "Logging/StructuredLog.h"
 #include "Kismet/KismetStringLibrary.h"
 #include "ModLoading/ModLoadingLibrary.h"
 #include "Module/WorldModuleManager.h"
@@ -192,6 +192,10 @@ void UMUNMenuModule::CheckForModUpdates()
 // Parse the HTTP response to extract the data we want: "mod_reference" and "version"
 void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePtr Response, const bool bWasSuccessful)
 {
+	// Increment the counter regardless of whether the request was sent to avoid causing everything else to fail.
+	// TODO: This is not ideal, and we may want limit the requests per second or batch them to avoid this behavior entirely in the future.
+	APIIndexRetrieved++;
+
 	PendingRequests.Remove(Request);
 	if(bWasSuccessful){
 
@@ -207,7 +211,7 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 		FJsonSerializer::Deserialize(Reader, ResponseObj);
 
 		// https://forums.unrealengine.com/t/parse-json-file-with-array-of-objects-without-converting-to-ustruct/650839/7
-		if(ResponseObj.IsValid() && ResponseObj->HasField("data"))
+    if(ResponseObj.IsValid() && ResponseObj->HasField(TEXT("data")))
 		{
 			// Find the highest version from the API
 			const TArray<TSharedPtr<FJsonValue>> DataArrayObj = ResponseObj->GetArrayField(ANSI_TO_TCHAR("data"));
@@ -273,8 +277,6 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 			UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Invalid response: no field \"data\" found."));
 		}
 
-		APIIndexRetrieved++;
-
 		// If the API version list is as long as the list of mods we've asked for, compare it to the known version list
 		if(APIIndex == APIIndexRetrieved)
 		{
@@ -310,23 +312,23 @@ void UMUNMenuModule::OnResponseReceived(FHttpRequestPtr Request, FHttpResponsePt
 					AvailableUpdates.Add(ModAvailableUpdate);
 				}
 			}
-
-			// If there are out of date mods in the list, create the menu widget. Also check if we are running on a server and not display the menu widget.
-			if (!AvailableUpdates.IsEmpty() && this->GetWorld()->GetNetMode() != NM_DedicatedServer)
-			{
-				// Add the popup in the Main Menu
-				const FPopupClosed CloseDelegate;
-
-				UFGBlueprintFunctionLibrary::AddPopupWithCloseDelegate(this->GetWorld()->GetFirstPlayerController(), FText::FromString("Mod Update Notifier"), FText::FromString("Body Text"), CloseDelegate, PID_NONE, MenuWidgetClass, this, false);
-			}
-			else
-			{
-				UE_LOG(LogModUpdateNotifier, Verbose, TEXT("All mods are up to date, not displaying a notification."));
-			}
 		}
 	}
 	else {
 		UE_LOG(LogModUpdateNotifier, Verbose, TEXT("Unable to connect to the API, user may be offline."));
+	}
+
+	// If there are out of date mods in the list, create the menu widget. Also check if we are running on a server and not display the menu widget.
+	if (!AvailableUpdates.IsEmpty() && this->GetWorld()->GetNetMode() != NM_DedicatedServer)
+	{
+		// Add the popup in the Main Menu
+		const FPopupClosed CloseDelegate;
+
+		UFGBlueprintFunctionLibrary::AddPopupWithCloseDelegate(this->GetWorld()->GetFirstPlayerController(), FText::FromString("Mod Update Notifier"), FText::FromString("Body Text"), CloseDelegate, PID_NONE, MenuWidgetClass, this, false);
+	}
+	else
+	{
+		UE_LOG(LogModUpdateNotifier, Verbose, TEXT("All mods are up to date, not displaying a notification."));
 	}
 }
 
@@ -370,15 +372,15 @@ void UMUNMenuModule::OnChangelogReceived(FHttpRequestPtr Request, FHttpResponseP
 		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Response->GetContentAsString());
 		FJsonSerializer::Deserialize(Reader, ResponseObj);
 
-		if(ResponseObj && ResponseObj->HasField("data"))
-		{
-			if(const TSharedPtr<FJsonObject> DataObj = ResponseObj->GetObjectField("data"); DataObj && DataObj->HasField("getModByReference"))
-			{
-				const TSharedPtr<FJsonObject> VersionObj = ResponseObj->GetObjectField("data")->GetObjectField("getModByReference")->GetObjectField("version");
+    if(ResponseObj && ResponseObj->HasField(TEXT("data")))
+    {
+        if(const TSharedPtr<FJsonObject> DataObj = ResponseObj->GetObjectField(TEXT("data")); DataObj && DataObj->HasField(TEXT("getModByReference")))
+        {
+            const TSharedPtr<FJsonObject> VersionObj = ResponseObj->GetObjectField(TEXT("data"))->GetObjectField(TEXT("getModByReference"))->GetObjectField(TEXT("version"));
 
-				const FString ModReference = VersionObj->GetObjectField("mod")->GetStringField("mod_reference");
+            const FString ModReference = VersionObj->GetObjectField(TEXT("mod"))->GetStringField(TEXT("mod_reference"));
 
-				const FString Changelog = VersionObj->GetStringField("changelog");
+            const FString Changelog = VersionObj->GetStringField(TEXT("changelog"));
 
 				ModChangelogs[InstalledMods.Find(ModReference)] = Changelog;
 
